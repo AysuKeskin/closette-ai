@@ -1,0 +1,36 @@
+# ---- General ----
+.env
+.env.local
+*.log
+.DS_Store
+*.pid
+*.seed
+
+# ---- Node / Expo (mobile) ----
+node_modules/
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+*.tsbuildinfo
+npm-debug.*
+yarn-error.*
+
+# ---- Java / Gradle (backend) ----
+backend/.gradle/
+backend/build/
+backend/bin/
+backend/out/
+backend/.idea/
+*.class
+
+# ---- Python (ai-service) ----
+ai-service/.venv/
+ai-service/venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# ---- Docker volumes ----
+.docker-data/
