@@ -1,0 +1,19 @@
+package ai.closette.ai.dto;
+
+import java.util.List;
+
+/**
+ * Structured result of analysing a clothing photo. Mirrors the AI service schema.
+ * {@code confidence} (0..1) drives the "We think this is a … — is that right?"
+ * confirmation UX (NFR-08).
+ */
+public record ClothingAnalysis(
+        String category,
+        String subcategory,
+        List<String> colors,
+        String pattern,
+        List<String> styles,
+        List<String> seasons,
+        double confidence
+) {
+}

@@ -1,0 +1,57 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: closette-backend
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:closette}
+    username: ${POSTGRES_USER:closette}
+    password: ${POSTGRES_PASSWORD:closette}
+  jpa:
+    hibernate:
+      ddl-auto: none  # Flyway owns the schema
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 15MB
+
+closette:
+  jwt:
+    secret: ${JWT_SECRET:change-me-to-a-long-random-secret-at-least-256-bits-long-000000}
+    access-ttl-minutes: ${JWT_ACCESS_TTL_MINUTES:60}
+    refresh-ttl-days: ${JWT_REFRESH_TTL_DAYS:30}
+  ai:
+    base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+    timeout-ms: 20000
+  storage:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ROOT_USER:closette}
+    secret-key: ${MINIO_ROOT_PASSWORD:closette123}
+    bucket-wardrobe: ${MINIO_BUCKET_WARDROBE:wardrobe}
+    bucket-beauty: ${MINIO_BUCKET_BEAUTY:beauty}
+    signed-url-ttl-minutes: 60
+  ratelimit:
+    ai-requests-per-minute: 20
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    ai.closette: DEBUG
