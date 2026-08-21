@@ -1,5 +1,7 @@
 package ai.closette.recommendation.service;
 
+import ai.closette.ai.dto.BuyAdvice;
+import ai.closette.ai.service.AIService;
 import ai.closette.auth.service.AccountGuard;
 import ai.closette.outfit.model.Outfit;
 import ai.closette.outfit.model.OutfitFeedback;
@@ -41,19 +43,22 @@ public class RecommendationService {
     private final WardrobeItemRepository wardrobeRepository;
     private final StorageService storage;
     private final AccountGuard accountGuard;
+    private final AIService aiService;
 
     public RecommendationService(PreferenceWeightRepository weightRepository,
                                  OutfitFeedbackRepository feedbackRepository,
                                  OutfitRepository outfitRepository,
                                  WardrobeItemRepository wardrobeRepository,
                                  StorageService storage,
-                                 AccountGuard accountGuard) {
+                                 AccountGuard accountGuard,
+                                 AIService aiService) {
         this.weightRepository = weightRepository;
         this.feedbackRepository = feedbackRepository;
         this.outfitRepository = outfitRepository;
         this.wardrobeRepository = wardrobeRepository;
         this.storage = storage;
         this.accountGuard = accountGuard;
+        this.aiService = aiService;
     }
 
     /** Recompute and persist the preference profile from accumulated feedback. */
@@ -132,7 +137,46 @@ public class RecommendationService {
                 .map(i -> WardrobeItemResponse.from(i, storage.presignedUrl(storage.wardrobeBucket(), i.getImageKey())))
                 .toList();
 
-        return new ShouldIBuyResponse(score, matching.size(), similar.size(), similarResponses, explanation);
+        // RAG: retrieved similar owned items + code-computed scores → LLM verdict.
+        BuyAdvice advice = aiService.buyAdvice(
+                candidateContext(req),
+                matchContext(matching),
+                Map.of("matchScore", score,
+                        "matchingItemCount", matching.size(),
+                        "similarItemCount", similar.size()));
+        String verdict = advice != null && advice.verdict() != null
+                ? advice.verdict() : ruleVerdict(score, similar.size());
+        String finalExplanation = advice != null && advice.explanation() != null && !advice.explanation().isBlank()
+                ? advice.explanation() : explanation;
+
+        return new ShouldIBuyResponse(score, verdict, matching.size(), similar.size(), similarResponses, finalExplanation);
+    }
+
+    private static Map<String, Object> candidateContext(ShouldIBuyRequest req) {
+        Map<String, Object> c = new LinkedHashMap<>();
+        c.put("category", req.category() != null ? req.category().name().toLowerCase(Locale.ROOT) : null);
+        c.put("colors", req.colors() == null ? List.of() : req.colors());
+        c.put("styles", req.styles() == null ? List.of() : req.styles());
+        return c;
+    }
+
+    private static List<Map<String, Object>> matchContext(List<WardrobeItem> matching) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (WardrobeItem it : matching.stream().limit(8).toList()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", it.getName());
+            m.put("category", it.getCategory().name().toLowerCase(Locale.ROOT));
+            m.put("colors", it.getColors());
+            m.put("styles", it.getStyles());
+            out.add(m);
+        }
+        return out;
+    }
+
+    private static String ruleVerdict(int score, int similarCount) {
+        if (similarCount >= 2) return "skip";
+        if (score >= 40) return "buy";
+        return "maybe";
     }
 
     // ---- helpers ----

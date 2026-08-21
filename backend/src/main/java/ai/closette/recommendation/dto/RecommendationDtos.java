@@ -25,6 +25,7 @@ public final class RecommendationDtos {
     /** FR-10 explainable result (NFR-07): a score plus the reasons behind it. */
     public record ShouldIBuyResponse(
             int matchScore,
+            String verdict,          // buy | maybe | skip (LLM, RAG-grounded)
             int matchingItemCount,
             int similarItemCount,
             List<WardrobeItemResponse> similarItems,

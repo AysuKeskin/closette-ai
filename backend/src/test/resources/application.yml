@@ -27,7 +27,9 @@ closette:
     access-ttl-minutes: 60
     refresh-ttl-days: 30
   ai:
-    base-url: http://localhost:8000
+    # Unreachable on purpose: tests are isolated from any running AI service and
+    # exercise the deterministic rule-based fallbacks (not a live LLM).
+    base-url: http://localhost:1
   storage:
     endpoint: http://localhost:9000
     access-key: test
