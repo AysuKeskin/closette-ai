@@ -71,6 +71,13 @@ public class WardrobeController {
         return ApiResponse.ok(service.get(SecurityUtil.currentUserId(), id));
     }
 
+    /** Visually similar owned items (pgvector similarity). */
+    @GetMapping("/items/{id}/similar")
+    public ApiResponse<List<WardrobeItemResponse>> similar(
+            @PathVariable UUID id, @RequestParam(defaultValue = "6") int limit) {
+        return ApiResponse.ok(service.similar(SecurityUtil.currentUserId(), id, limit));
+    }
+
     @PutMapping("/items/{id}")
     public ApiResponse<WardrobeItemResponse> update(
             @PathVariable UUID id, @RequestBody UpdateItemRequest request) {

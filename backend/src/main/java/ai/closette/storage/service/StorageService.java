@@ -1,6 +1,7 @@
 package ai.closette.storage.service;
 
 import ai.closette.common.exception.ApiException;
+import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -10,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -49,6 +51,22 @@ public class StorageService {
         } catch (Exception e) {
             log.error("Failed to upload object to bucket {}", bucket, e);
             throw ApiException.storage("Could not store image");
+        }
+    }
+
+    /** Downloads the raw bytes for a stored object (e.g. to compute an embedding). */
+    public byte[] download(String bucket, String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        try (InputStream in = client.getObject(GetObjectArgs.builder()
+                .bucket(bucket)
+                .object(key)
+                .build())) {
+            return in.readAllBytes();
+        } catch (Exception e) {
+            log.warn("Failed to download object {}/{}", bucket, key, e);
+            return null;
         }
     }
 

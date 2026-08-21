@@ -10,8 +10,11 @@ import ai.closette.wardrobe.dto.UpdateItemRequest;
 import ai.closette.wardrobe.dto.WardrobeItemResponse;
 import ai.closette.wardrobe.model.WardrobeFilter;
 import ai.closette.wardrobe.model.WardrobeItem;
+import ai.closette.wardrobe.repository.EmbeddingRepository;
 import ai.closette.wardrobe.repository.WardrobeItemRepository;
 import jakarta.persistence.criteria.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,14 +28,19 @@ import java.util.UUID;
 @Service
 public class WardrobeService {
 
+    private static final Logger log = LoggerFactory.getLogger(WardrobeService.class);
+
     private final WardrobeItemRepository repository;
     private final StorageService storage;
     private final AIService aiService;
+    private final EmbeddingRepository embeddings;
 
-    public WardrobeService(WardrobeItemRepository repository, StorageService storage, AIService aiService) {
+    public WardrobeService(WardrobeItemRepository repository, StorageService storage,
+                           AIService aiService, EmbeddingRepository embeddings) {
         this.repository = repository;
         this.storage = storage;
         this.aiService = aiService;
+        this.embeddings = embeddings;
     }
 
     /** Flow A step 1: store the photo and run AI analysis (editable by the user). */
@@ -60,7 +68,40 @@ public class WardrobeService {
         item.setSize(trimToNull(req.size()));
         item.setImageKey(trimToNull(req.imageKey()));
         item.setFavorite(Boolean.TRUE.equals(req.favorite()));
-        return toResponse(repository.save(item));
+        // Flush so the row exists before the JDBC embedding UPDATE hits the same row.
+        WardrobeItem saved = repository.saveAndFlush(item);
+        computeEmbedding(saved);
+        return toResponse(saved);
+    }
+
+    /** Best-effort visual embedding (pgvector). Runs once per item; never blocks save. */
+    private void computeEmbedding(WardrobeItem item) {
+        if (item.getImageKey() == null || item.getImageKey().isBlank()) {
+            return;
+        }
+        try {
+            byte[] bytes = storage.download(storage.wardrobeBucket(), item.getImageKey());
+            if (bytes == null) return;
+            float[] vector = aiService.embedItem(bytes, item.getImageKey(), "image/jpeg");
+            if (vector != null && vector.length > 0) {
+                embeddings.saveWardrobeEmbedding(item.getId(), vector);
+            }
+        } catch (Exception e) {
+            // Similarity is a nice-to-have; a failure here must not break item creation.
+            log.warn("Embedding failed for item {}", item.getId(), e);
+        }
+    }
+
+    /** Owned items most visually similar to the given one (pgvector cosine). */
+    @Transactional(readOnly = true)
+    public List<WardrobeItemResponse> similar(UUID userId, UUID itemId, int limit) {
+        require(userId, itemId); // 404 if not the user's item
+        List<UUID> ids = embeddings.similarWardrobe(userId, itemId, limit);
+        List<WardrobeItemResponse> out = new ArrayList<>();
+        for (UUID id : ids) {
+            repository.findByIdAndUserId(id, userId).ifPresent(i -> out.add(toResponse(i)));
+        }
+        return out;
     }
 
     @Transactional(readOnly = true)
