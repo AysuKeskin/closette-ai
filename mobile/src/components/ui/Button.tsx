@@ -12,10 +12,14 @@ import { Icon, IconName } from './Icon';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 
+type Variant = 'primary' | 'secondary' | 'ghost';
+type Size = 'md' | 'sm';
+
 type Props = {
   label: string;
   onPress?: () => void;
   variant?: Variant;
+  size?: Size;
   loading?: boolean;
   disabled?: boolean;
   icon?: string; // leading glyph, e.g. "+" or "✨"
@@ -28,6 +32,7 @@ export function Button({
   label,
   onPress,
   variant = 'primary',
+  size = 'md',
   loading,
   disabled,
   icon,
@@ -36,6 +41,7 @@ export function Button({
   style,
 }: Props) {
   const isDisabled = disabled || loading;
+  const sm = size === 'sm';
   return (
     <Pressable
       accessibilityRole="button"
@@ -45,6 +51,7 @@ export function Button({
       android_ripple={isDisabled ? undefined : { color: feedback.ripple, borderless: false }}
       style={({ pressed }) => [
         styles.base,
+        sm && styles.baseSm,
         variantStyles[variant],
         fullWidth && { alignSelf: 'stretch' },
         pressed && !isDisabled && [styles.pressed, pressedTone[variant]],
@@ -57,11 +64,11 @@ export function Button({
       ) : (
         <View style={styles.content}>
           {iconName ? (
-            <Icon name={iconName} size={22} />
+            <Icon name={iconName} size={sm ? 18 : 22} />
           ) : icon ? (
             <AppText style={[styles.icon, labelTone[variant]]}>{icon}</AppText>
           ) : null}
-          <AppText style={[styles.label, labelTone[variant]]}>{label}</AppText>
+          <AppText style={[sm ? styles.labelSm : styles.label, labelTone[variant]]}>{label}</AppText>
         </View>
       )}
     </Pressable>
@@ -76,9 +83,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  baseSm: { minHeight: 40, paddingHorizontal: spacing.lg },
   content: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   icon: { fontSize: typography.size.title },
   label: { fontSize: typography.size.body, fontWeight: typography.weight.semibold },
+  labelSm: { fontSize: typography.size.label, fontWeight: typography.weight.semibold },
   pressed: { transform: [{ scale: feedback.pressScale }] },
   disabled: { opacity: 0.5 },
 });

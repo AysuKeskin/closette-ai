@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, View } from 'react-native';
 
 import {
   AppText,
@@ -15,7 +15,7 @@ import {
   Screen,
 } from '../../components/ui';
 import { BEAUTY_CATEGORIES } from '../../api/types';
-import { useBeauty } from '../../features/beauty';
+import { useBeauty, useDeleteBeauty } from '../../features/beauty';
 import { spacing } from '../../theme';
 import type { BeautyStackParamList } from '../../navigation/types';
 
@@ -27,6 +27,18 @@ export function BeautyScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<BeautyStackParamList>>();
   const [category, setCategory] = useState<string | undefined>(undefined);
   const { data, isLoading, isError, refetch, isRefetching } = useBeauty(category);
+  const deleteBeauty = useDeleteBeauty();
+
+  const confirmDelete = (id: string, name: string) => {
+    Alert.alert(
+      'Delete product?',
+      `"${name}" will be removed from your shelf. This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteBeauty.mutate(id) },
+      ],
+    );
+  };
 
   return (
     <Screen padded={false}>
@@ -73,7 +85,7 @@ export function BeautyScreen() {
         <FlatList
           data={data}
           keyExtractor={(i) => i.id}
-          numColumns={2}
+          numColumns={3}
           columnWrapperStyle={styles.column}
           contentContainerStyle={styles.grid}
           onRefresh={refetch}
@@ -82,9 +94,10 @@ export function BeautyScreen() {
             <View style={styles.cell}>
               <ItemTile
                 title={item.productName}
-                subtitle={[item.brand, titleCase(item.category)].filter(Boolean).join(' · ')}
+                subtitle={item.brand ?? titleCase(item.category)}
                 imageUrl={item.imageUrl}
                 favorite={item.favorite}
+                onDelete={() => confirmDelete(item.id, item.productName)}
               />
             </View>
           )}
@@ -96,7 +109,7 @@ export function BeautyScreen() {
 
 const styles = StyleSheet.create({
   top: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
-  grid: { padding: spacing.xl, gap: spacing.lg },
-  column: { gap: spacing.lg },
-  cell: { flex: 1 },
+  grid: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  column: { gap: spacing.md, marginBottom: spacing.lg },
+  cell: { width: '30%' },
 });

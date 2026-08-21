@@ -17,6 +17,13 @@ export function useRecentItems(limit = 8) {
   });
 }
 
+export function useSimilarItems(id: string, limit = 6) {
+  return useQuery({
+    queryKey: ['wardrobe', 'similar', id],
+    queryFn: () => wardrobeApi.similar(id, limit),
+  });
+}
+
 export function useAnalyzeItem() {
   return useMutation({
     mutationFn: (args: { uri: string; mimeType: string; name: string }) =>

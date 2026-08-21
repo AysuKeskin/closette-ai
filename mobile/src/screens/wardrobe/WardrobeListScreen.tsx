@@ -83,7 +83,7 @@ export function WardrobeListScreen() {
         <FlatList
           data={data}
           keyExtractor={(i) => i.id}
-          numColumns={2}
+          numColumns={3}
           columnWrapperStyle={styles.column}
           contentContainerStyle={styles.grid}
           onRefresh={refetch}
@@ -92,9 +92,10 @@ export function WardrobeListScreen() {
             <View style={styles.cell}>
               <ItemTile
                 title={item.name}
-                subtitle={[titleCase(item.category), item.colors[0]].filter(Boolean).join(' · ')}
+                subtitle={titleCase(item.category)}
                 imageUrl={item.imageUrl}
                 favorite={item.favorite}
+                onPress={() => navigation.navigate('ItemDetail', { item })}
               />
             </View>
           )}
@@ -118,8 +119,8 @@ function titleCase(value: string): string {
 const styles = StyleSheet.create({
   top: { paddingHorizontal: spacing.xl, gap: spacing.md },
   filters: { marginTop: spacing.xs, marginBottom: spacing.sm },
-  grid: { padding: spacing.xl, gap: spacing.lg },
-  column: { gap: spacing.lg },
-  cell: { flex: 1 },
+  grid: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  column: { gap: spacing.md, marginBottom: spacing.lg },
+  cell: { width: '30%' },
   count: { marginTop: spacing.lg },
 });

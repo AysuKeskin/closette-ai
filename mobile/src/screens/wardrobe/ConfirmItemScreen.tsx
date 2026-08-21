@@ -102,6 +102,22 @@ export function ConfirmItemScreen() {
         </Card>
       ) : null}
 
+      {ai.color_details && ai.color_details.length > 0 ? (
+        <View style={styles.colorsBlock}>
+          <AppText variant="label" tone="secondary" style={styles.fieldLabel}>
+            Detected colours
+          </AppText>
+          <View style={styles.swatches}>
+            {ai.color_details.map((c) => (
+              <View key={`${c.hex}-${c.name}`} style={styles.swatch}>
+                <View style={[styles.swatchDot, { backgroundColor: c.hex }]} />
+                <AppText variant="caption">{`${c.name} · ${c.percentage}%`}</AppText>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.form}>
         <TextField label="Name" value={name} onChangeText={setName} placeholder="e.g. Black mini dress" />
 
@@ -144,6 +160,26 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   confidence: { backgroundColor: colors.surfaceAlt, marginBottom: spacing.lg },
+  colorsBlock: { marginBottom: spacing.lg },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  swatch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  swatchDot: {
+    width: 16,
+    height: 16,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   form: { gap: spacing.lg },
   fieldLabel: { marginLeft: spacing.xs, marginBottom: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

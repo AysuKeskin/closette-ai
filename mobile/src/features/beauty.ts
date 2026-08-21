@@ -27,3 +27,11 @@ export function useCreateBeauty() {
     },
   });
 }
+
+export function useDeleteBeauty() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => beautyApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['beauty'] }),
+  });
+}

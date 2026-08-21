@@ -113,6 +113,12 @@ export const wardrobeApi = {
     });
     return unwrap(data);
   },
+  async similar(id: string, limit = 6): Promise<WardrobeItem[]> {
+    const { data } = await api.get<Envelope<WardrobeItem[]>>(`/api/wardrobe/items/${id}/similar`, {
+      params: { limit },
+    });
+    return unwrap(data);
+  },
   async toggleFavorite(id: string): Promise<WardrobeItem> {
     const { data } = await api.patch<Envelope<WardrobeItem>>(`/api/wardrobe/items/${id}/favorite`);
     return unwrap(data);
@@ -142,6 +148,9 @@ export const beautyApi = {
     });
     return unwrap(data);
   },
+  async remove(id: string): Promise<void> {
+    await api.delete(`/api/beauty/items/${id}`);
+  },
 };
 
 // ---- Outfits / Get Ready ----
@@ -152,6 +161,10 @@ export const outfitApi = {
   },
   async saved(): Promise<Outfit[]> {
     const { data } = await api.get<Envelope<Outfit[]>>('/api/outfits');
+    return unwrap(data);
+  },
+  async save(payload: { title: string; occasion?: string; itemIds: string[] }): Promise<Outfit> {
+    const { data } = await api.post<Envelope<Outfit>>('/api/outfits', { ...payload, status: 'SAVED' });
     return unwrap(data);
   },
 };

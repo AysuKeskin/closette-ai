@@ -46,10 +46,17 @@ export const BEAUTY_CATEGORIES = [
 ] as const;
 export type BeautyCategory = (typeof BEAUTY_CATEGORIES)[number];
 
+export type ColorDetail = {
+  name: string;
+  hex: string;
+  percentage: number;
+};
+
 export type ClothingAnalysis = {
   category: string;
   subcategory: string;
   colors: string[];
+  color_details?: ColorDetail[];
   pattern: string;
   styles: string[];
   seasons: string[];
@@ -133,8 +140,11 @@ export type Outfit = {
   createdAt: string;
 };
 
+export type BuyVerdict = 'buy' | 'maybe' | 'skip';
+
 export type ShouldIBuyResult = {
   matchScore: number;
+  verdict: BuyVerdict;
   matchingItemCount: number;
   similarItemCount: number;
   similarItems: WardrobeItem[];

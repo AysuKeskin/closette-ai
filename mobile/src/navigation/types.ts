@@ -1,6 +1,6 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
-import type { AnalyzeResponse, BeautyAnalyzeResponse } from '../api/types';
+import type { AnalyzeResponse, BeautyAnalyzeResponse, WardrobeItem } from '../api/types';
 
 export type AuthStackParamList = {
   Login: undefined;
@@ -17,6 +17,7 @@ export type WardrobeStackParamList = {
   WardrobeList: undefined;
   AddItem: undefined;
   ConfirmItem: { analysis: AnalyzeResponse; imageUri: string };
+  ItemDetail: { item: WardrobeItem };
 };
 
 export type BeautyStackParamList = {

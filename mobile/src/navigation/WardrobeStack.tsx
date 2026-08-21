@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { AddItemScreen } from '../screens/wardrobe/AddItemScreen';
 import { ConfirmItemScreen } from '../screens/wardrobe/ConfirmItemScreen';
+import { ItemDetailScreen } from '../screens/wardrobe/ItemDetailScreen';
 import { WardrobeListScreen } from '../screens/wardrobe/WardrobeListScreen';
 import type { WardrobeStackParamList } from './types';
 
@@ -13,6 +14,7 @@ export function WardrobeStack() {
       <Stack.Screen name="WardrobeList" component={WardrobeListScreen} />
       <Stack.Screen name="AddItem" component={AddItemScreen} />
       <Stack.Screen name="ConfirmItem" component={ConfirmItemScreen} />
+      <Stack.Screen name="ItemDetail" component={ItemDetailScreen} />
     </Stack.Navigator>
   );
 }

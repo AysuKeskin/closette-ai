@@ -16,7 +16,7 @@ import {
   TextField,
   VerifyBanner,
 } from '../../components/ui';
-import { CLOTHING_CATEGORIES, ClothingCategory, ShouldIBuyResult } from '../../api/types';
+import { BuyVerdict, CLOTHING_CATEGORIES, ClothingCategory, ShouldIBuyResult } from '../../api/types';
 import { useShouldIBuy } from '../../features/recommendation';
 import { openVerifyEmail } from '../../navigation/navigationRef';
 import { colors, radius, spacing } from '../../theme';
@@ -25,6 +25,12 @@ import type { HomeStackParamList } from '../../navigation/types';
 function titleCase(value: string): string {
   return value.charAt(0) + value.slice(1).toLowerCase();
 }
+
+const VERDICTS: Record<BuyVerdict, { label: string; bg: string; fg: string }> = {
+  buy: { label: '✓ Worth it', bg: '#E4F0E8', fg: colors.success },
+  maybe: { label: 'Your call', bg: '#FBEBCF', fg: colors.warning },
+  skip: { label: 'Skip it', bg: '#F7E2E2', fg: colors.danger },
+};
 
 export function ShopAssistantScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
@@ -108,6 +114,11 @@ export function ShopAssistantScreen() {
             <AppText variant="label" tone="secondary" style={styles.scoreLabel}>
               wardrobe match
             </AppText>
+            <View style={[styles.verdict, { backgroundColor: VERDICTS[result.verdict].bg }]}>
+              <AppText variant="label" style={{ color: VERDICTS[result.verdict].fg, fontWeight: '700' }}>
+                {VERDICTS[result.verdict].label}
+              </AppText>
+            </View>
           </View>
           <AppText variant="body" style={styles.explanation}>
             {result.explanation}
@@ -149,7 +160,8 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   errorCard: { marginTop: spacing.lg },
   result: { marginTop: spacing.xl, gap: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface },
-  scoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  verdict: { marginLeft: 'auto', paddingVertical: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.pill },
   scoreLabel: { marginBottom: spacing.xs },
   explanation: { lineHeight: 22 },
   similarTitle: { marginBottom: spacing.sm },
