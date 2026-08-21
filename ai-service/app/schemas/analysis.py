@@ -53,6 +53,41 @@ class EmbeddingResponse(BaseModel):
     vector: list[float]
 
 
+class OutfitItemBrief(BaseModel):
+    id: str
+    name: str = ""
+    category: str = ""
+    subcategory: str | None = None
+    colors: list[str] = Field(default_factory=list)
+    styles: list[str] = Field(default_factory=list)
+    seasons: list[str] = Field(default_factory=list)
+
+
+class OutfitRequest(BaseModel):
+    """RAG input: the occasion + the RETRIEVED owned items (the knowledge base)."""
+
+    occasion: str = ""
+    items: list[OutfitItemBrief] = Field(default_factory=list)
+    preferences: list[str] = Field(default_factory=list)
+
+
+class OutfitSuggestion(BaseModel):
+    itemIds: list[str] = Field(default_factory=list)
+    title: str = "Your look"
+    rationale: str = ""
+
+
+class BuyAdviceRequest(BaseModel):
+    candidate: dict = Field(default_factory=dict)
+    matches: list[dict] = Field(default_factory=list)   # retrieved similar owned items
+    scores: dict = Field(default_factory=dict)          # code-computed compatibility
+
+
+class BuyAdviceResponse(BaseModel):
+    verdict: str = "maybe"   # buy | maybe | skip
+    explanation: str = ""
+
+
 class ImageResponse(BaseModel):
     """A processed image returned as base64 PNG (background removal / canonicalise)."""
 

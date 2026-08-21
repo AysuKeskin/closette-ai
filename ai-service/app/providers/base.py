@@ -18,3 +18,15 @@ class AIProvider(ABC):
     @abstractmethod
     def explain_ingredient(self, name: str) -> IngredientExplanation:
         ...
+
+    @abstractmethod
+    def generate_outfit(self, occasion: str, items: list[dict], preferences: list[str]) -> dict:
+        """Compose one complete outfit from the given owned items (RAG: the items
+        are the retrieved context). Returns {itemIds, title, rationale}."""
+        ...
+
+    @abstractmethod
+    def buy_advice(self, candidate: dict, matches: list[dict], scores: dict) -> dict:
+        """Should-I-buy verdict (RAG: retrieved similar owned items + computed
+        scores as context). Returns {verdict: buy|maybe|skip, explanation}."""
+        ...

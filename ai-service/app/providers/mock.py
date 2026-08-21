@@ -71,3 +71,44 @@ class MockProvider(AIProvider):
             "check the product packaging or a trusted source for details.",
         )
         return IngredientExplanation(name=name, explanation=explanation)
+
+    def generate_outfit(self, occasion: str, items: list[dict], preferences: list[str]) -> dict:
+        # Deterministic rule-based composer (no LLM): a dress, or top + bottom,
+        # then complete with one of each supporting category.
+        by_cat: dict[str, list[dict]] = {}
+        for it in items:
+            by_cat.setdefault(str(it.get("category", "")).lower(), []).append(it)
+
+        chosen: list[dict] = []
+        if by_cat.get("dress") or by_cat.get("dresses"):
+            chosen.append((by_cat.get("dress") or by_cat.get("dresses"))[0])
+        else:
+            if by_cat.get("top") or by_cat.get("tops"):
+                chosen.append((by_cat.get("top") or by_cat.get("tops"))[0])
+            if by_cat.get("bottom") or by_cat.get("bottoms"):
+                chosen.append((by_cat.get("bottom") or by_cat.get("bottoms"))[0])
+        for cat in ("outerwear", "shoes", "bag", "bags", "jewelry", "accessory", "accessories"):
+            if by_cat.get(cat):
+                chosen.append(by_cat[cat][0])
+
+        occ = (occasion or "").strip() or "your day"
+        return {
+            "itemIds": [it["id"] for it in chosen if it.get("id")],
+            "title": "Your look",
+            "rationale": f"A complete look for {occ} built from {len(chosen)} pieces you already own.",
+        }
+
+    def buy_advice(self, candidate: dict, matches: list[dict], scores: dict) -> dict:
+        # Rule-based verdict (no LLM): own several similar → skip; good fit → buy.
+        similar = int(scores.get("similarItemCount", 0))
+        match_score = int(scores.get("matchScore", 0))
+        if similar >= 2:
+            verdict = "skip"
+            why = f"You already own {similar} similar pieces, so this would mostly duplicate your wardrobe."
+        elif match_score >= 40:
+            verdict = "buy"
+            why = "It fits your style and works with several pieces you already own."
+        else:
+            verdict = "maybe"
+            why = "It could work, but it doesn't strongly connect to what you already wear."
+        return {"verdict": verdict, "explanation": why}

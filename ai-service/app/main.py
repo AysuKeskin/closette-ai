@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import analyze, embed, image, ingredients
+from app.routers import analyze, embed, generate, image, ingredients
 
 app = FastAPI(
     title="Closette AI Service",
@@ -23,6 +23,7 @@ app.add_middleware(
 
 app.include_router(analyze.router)
 app.include_router(embed.router)
+app.include_router(generate.router)
 app.include_router(image.router)
 app.include_router(ingredients.router)
 
