@@ -1,9 +1,14 @@
 package ai.closette.ai.client;
 
 import ai.closette.ai.dto.BeautyAnalysis;
+import ai.closette.ai.dto.BuyAdvice;
 import ai.closette.ai.dto.ClothingAnalysis;
 import ai.closette.ai.dto.IngredientExplanation;
+import ai.closette.ai.dto.OutfitCandidate;
+import ai.closette.ai.dto.OutfitSuggestion;
 import ai.closette.ai.service.AIService;
+
+import java.util.List;
 import ai.closette.common.exception.ApiException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +45,57 @@ public class FastAPIAiClient implements AIService {
     @Override
     public BeautyAnalysis analyzeBeautyPhoto(byte[] image, String filename, String contentType) {
         return postImage("/analyze/beauty", image, filename, contentType, BeautyAnalysis.class);
+    }
+
+    @Override
+    public float[] embedItem(byte[] image, String filename, String contentType) {
+        // Best-effort: a missing embedding must never fail item creation.
+        try {
+            EmbedResult result = postImage("/embed/item", image, filename, contentType, EmbedResult.class);
+            return result != null ? result.vector() : null;
+        } catch (Exception e) {
+            log.warn("AI embedding failed for {}", filename, e);
+            return null;
+        }
+    }
+
+    private record EmbedResult(String model, int dim, float[] vector) {
+    }
+
+    @Override
+    public OutfitSuggestion generateOutfit(String occasion, List<OutfitCandidate> items, List<String> preferences) {
+        try {
+            return aiWebClient.post()
+                    .uri("/generate/outfit")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of(
+                            "occasion", occasion == null ? "" : occasion,
+                            "items", items,
+                            "preferences", preferences == null ? List.of() : preferences))
+                    .retrieve()
+                    .bodyToMono(OutfitSuggestion.class)
+                    .block();
+        } catch (Exception e) {
+            log.warn("AI outfit generation failed", e);
+            return null; // caller falls back to the rule-based composer
+        }
+    }
+
+    @Override
+    public BuyAdvice buyAdvice(Map<String, Object> candidate, List<Map<String, Object>> matches,
+                              Map<String, Object> scores) {
+        try {
+            return aiWebClient.post()
+                    .uri("/generate/buy-advice")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("candidate", candidate, "matches", matches, "scores", scores))
+                    .retrieve()
+                    .bodyToMono(BuyAdvice.class)
+                    .block();
+        } catch (Exception e) {
+            log.warn("AI buy-advice failed", e);
+            return null;
+        }
     }
 
     @Override
