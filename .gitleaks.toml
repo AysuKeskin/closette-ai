@@ -1,0 +1,21 @@
+# Gitleaks configuration. Extends the built-in ruleset; the allowlists below
+# cover values that are meant to live in the repo, so a genuine leak is never
+# lost among known-fake credentials.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Documented placeholders in .env.example, compose and test config"
+regexes = [
+  '''change-me-to-a-long-random-secret[a-z0-9-]*''',
+  '''test-secret-that-is-definitely-long-enough[a-z0-9-]*''',
+  '''closette123''',
+]
+
+[[allowlists]]
+description = "Test fixtures use obviously fake keys (test-key, qwen-key, …)"
+paths = [
+  '''ai-service/tests/.*''',
+  '''backend/src/test/.*''',
+]

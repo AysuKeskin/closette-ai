@@ -1,0 +1,350 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+# Default token: read-only. The jobs that need more (publishing to GHCR, OIDC
+# for keyless signing) escalate their own permissions.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "21"
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  IMAGE_PREFIX: ghcr.io/aysukeskin/closette
+
+jobs:
+  backend:
+    name: backend (Java 21)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      # `build` = compile + test + bootJar, so a broken jar fails here rather
+      # than in the image build below.
+      - name: gradle build (compile, test, bootJar)
+        working-directory: backend
+        run: ./gradlew build --no-daemon
+
+      - name: test summary
+        if: always()
+        run: python3 .github/scripts/junit_summary.py backend/build/test-results/test
+
+      - name: upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: backend/build/reports/tests/test
+          retention-days: 7
+
+  ai-service:
+    name: ai-service (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ai-service/requirements.txt
+
+      - name: install dependencies
+        working-directory: ai-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # The suite pins every provider to its offline mock (see tests/conftest.py),
+      # so this never calls a model and never needs a key.
+      - name: pytest
+        working-directory: ai-service
+        run: pytest -q --junitxml=../pytest-results/results.xml
+
+      - name: test summary
+        if: always()
+        run: python3 .github/scripts/junit_summary.py pytest-results
+
+  mobile:
+    name: mobile (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: npm ci
+        working-directory: mobile
+        run: npm ci
+
+      # No test runner yet — the type checker is the mobile gate.
+      - name: typecheck
+        working-directory: mobile
+        run: npx tsc --noEmit
+
+  secret-scan:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks scans history, not just the diff
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+  smoke:
+    name: compose smoke test
+    runs-on: ubuntu-latest
+    needs: [backend, ai-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The unit suites run against H2 and mocked storage. This is the only place
+      # the real wiring is exercised: Flyway on pgvector, MinIO, and the
+      # backend → AI-service hop, all through the compose file we ship.
+      - name: start the stack
+        run: |
+          cp .env.example .env
+          docker compose --profile app up -d --build
+
+      - name: run the smoke test
+        run: bash .github/scripts/smoke.sh
+
+      - name: dump container logs on failure
+        if: failure()
+        run: docker compose --profile app logs --tail 200
+
+      - name: tear down
+        if: always()
+        run: docker compose --profile app down -v
+
+  build-scan-push:
+    name: build, scan, push (${{ matrix.component }})
+    runs-on: ubuntu-latest
+    needs: [backend, ai-service, mobile, secret-scan]
+    permissions:
+      contents: read
+      packages: write   # push to GHCR (non-PR events only); auth via GITHUB_TOKEN
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, ai-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.component }}
+          tags: |
+            type=sha,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # Build once into the local docker so Trivy can scan it before anything is
+      # published. The layer cache is saved so the push step reuses it.
+      - name: build image for scan (local, not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.component }}
+          load: true
+          push: false
+          tags: local/closette-${{ matrix.component }}:scan
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+      - name: Trivy vulnerability scan (CRITICAL/HIGH gate)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: local/closette-${{ matrix.component }}:scan
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          format: table
+
+      # Everything below runs only once the scan passes, and only off PRs:
+      # a PR validates and scans, but never publishes.
+      - name: log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: push scanned image to GHCR
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.component }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.component }}   # no recompile
+
+      # A matrix job cannot publish per-leg outputs, so the digest travels to the
+      # signing job as a one-line artifact instead.
+      - name: record the published digest
+        if: github.event_name != 'pull_request'
+        run: echo "${{ steps.push.outputs.digest }}" > digest.txt
+
+      - name: upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.component }}
+          path: digest.txt
+          retention-days: 1
+
+      - name: report outcome
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "::notice::PR build — ${{ matrix.component }} scanned (no CRITICAL/HIGH), not published"
+          else
+            echo "::notice::published ${{ env.IMAGE_PREFIX }}-${{ matrix.component }}@${{ steps.push.outputs.digest }}"
+            {
+              echo "### ${{ matrix.component }} image published"
+              echo "- digest: \`${{ steps.push.outputs.digest }}\`"
+              echo '- tags:'
+              echo '```'
+              echo "${{ steps.meta.outputs.tags }}"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  sign-and-sbom:
+    name: cosign sign and Syft SBOM (${{ matrix.component }})
+    runs-on: ubuntu-latest
+    needs: [build-scan-push]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # keyless signing identity
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, ai-service]
+    steps:
+      - uses: sigstore/cosign-installer@v3
+
+      - name: download digest
+        uses: actions/download-artifact@v4
+        with:
+          name: digest-${{ matrix.component }}
+
+      - name: resolve the image reference
+        id: image
+        run: |
+          set -euo pipefail
+          DIGEST="$(tr -d '[:space:]' < digest.txt)"
+          # The digest ends up in signing commands, so accept only sha256:<hex>.
+          if ! printf '%s' "$DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error::refusing to sign an unexpected digest: '$DIGEST'"
+            exit 1
+          fi
+          echo "ref=${IMAGE_PREFIX}-${{ matrix.component }}@${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: cosign sign (keyless, OIDC)
+        run: cosign sign --yes "${{ steps.image.outputs.ref }}"
+
+      - name: generate SPDX SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.image.outputs.ref }}
+          format: spdx-json
+          upload-artifact: false
+          output-file: sbom-${{ matrix.component }}.spdx.json
+
+      - name: cosign attest SBOM (bind it to the image)
+        run: |
+          cosign attest --yes \
+            --predicate sbom-${{ matrix.component }}.spdx.json --type spdxjson \
+            "${{ steps.image.outputs.ref }}"
+
+      - name: upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component }}
+          path: sbom-${{ matrix.component }}.spdx.json
+
+  release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs: [sign-and-sbom, smoke]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write   # create the GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: download SBOMs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sbom-*
+          merge-multiple: true
+
+      # Use this tag's CHANGELOG section as the release notes, so a release is
+      # never published with an empty body.
+      - name: extract release notes from CHANGELOG
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VER="${VERSION#v}"
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VER" '
+              $0 ~ "^## \\[" ver "\\]" {flag=1; print; next}
+              flag && /^## \[/ {exit}
+              flag {print}
+            ' CHANGELOG.md > release-notes.md
+          fi
+          if [ ! -s release-notes.md ]; then
+            echo "::warning::no CHANGELOG section for $VER; using a default note"
+            echo "Release $VERSION" > release-notes.md
+          fi
+          echo "----- release notes -----"; cat release-notes.md
+
+      - name: create GitHub Release with notes + SBOMs
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: sbom-*.spdx.json

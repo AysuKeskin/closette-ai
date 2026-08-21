@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector image = postgres:16 + the `vector` extension (for visual similarity).
+    image: pgvector/pgvector:pg16
     container_name: closette-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-closette}
@@ -68,7 +69,12 @@ services:
     container_name: closette-ai-service
     environment:
       AI_PROVIDER: ${AI_PROVIDER:-mock}
+      VLM_API_KEY: ${VLM_API_KEY:-}
+      VLM_MODEL: ${VLM_MODEL:-}
+      VLM_BASE_URL: ${VLM_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       QWEN_API_KEY: ${QWEN_API_KEY:-}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
       SEG_PROVIDER: ${SEG_PROVIDER:-none}
       EMBED_PROVIDER: ${EMBED_PROVIDER:-mock}
     ports:
