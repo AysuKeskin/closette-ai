@@ -1,5 +1,8 @@
 package ai.closette.outfit.service;
 
+import ai.closette.ai.dto.OutfitCandidate;
+import ai.closette.ai.dto.OutfitSuggestion;
+import ai.closette.ai.service.AIService;
 import ai.closette.common.exception.ApiException;
 import ai.closette.outfit.dto.OutfitDtos.FeedbackRequest;
 import ai.closette.outfit.dto.OutfitDtos.GeneratedLook;
@@ -39,18 +42,22 @@ public class OutfitService {
     private final OutfitFeedbackRepository feedbackRepository;
     private final WardrobeItemRepository wardrobeRepository;
     private final StorageService storage;
+    private final AIService aiService;
 
     public OutfitService(OutfitRepository outfitRepository,
                          OutfitFeedbackRepository feedbackRepository,
                          WardrobeItemRepository wardrobeRepository,
-                         StorageService storage) {
+                         StorageService storage,
+                         AIService aiService) {
         this.outfitRepository = outfitRepository;
         this.feedbackRepository = feedbackRepository;
         this.wardrobeRepository = wardrobeRepository;
         this.storage = storage;
+        this.aiService = aiService;
     }
 
-    /** FR-07/08 — compose a complete look from the user's own items. */
+    /** FR-07/08 — compose a complete look from the user's own items (RAG: retrieve
+     * the wardrobe as context → the stylist LLM picks the outfit; rule-based fallback). */
     @Transactional(readOnly = true)
     public GeneratedLook generate(UUID userId, GetReadyRequest request) {
         List<WardrobeItem> all = wardrobeRepository.findByUserIdOrderByCreatedAtDesc(userId);
@@ -60,13 +67,41 @@ public class OutfitService {
                     List.of());
         }
 
+        String occasion = occasionOf(request);
+
+        // Retrieve up to 40 owned items as the LLM's context, then let it compose.
+        List<WardrobeItem> candidates = all.size() > 40 ? all.subList(0, 40) : all;
+        OutfitSuggestion ai = aiService.generateOutfit(occasion, toCandidates(candidates), List.of());
+        if (ai != null && ai.itemIds() != null && !ai.itemIds().isEmpty()) {
+            Map<String, WardrobeItem> byId = new LinkedHashMap<>();
+            for (WardrobeItem i : all) {
+                byId.put(i.getId().toString(), i);
+            }
+            List<WardrobeItem> look = new ArrayList<>();
+            for (String id : ai.itemIds()) {
+                WardrobeItem it = byId.get(id);
+                if (it != null && !look.contains(it)) {
+                    look.add(it);
+                }
+            }
+            if (!look.isEmpty()) {
+                String title = notBlank(ai.title()) ? ai.title().trim() : "Your look";
+                String rationale = notBlank(ai.rationale()) ? ai.rationale().trim()
+                        : "A complete look for " + occasion + ".";
+                return new GeneratedLook(title, rationale, look.stream().map(this::toResponse).toList());
+            }
+        }
+
+        // Fallback: deterministic rule-based composer (AI unavailable / empty result).
+        return ruleBasedLook(all, occasion);
+    }
+
+    private GeneratedLook ruleBasedLook(List<WardrobeItem> all, String occasion) {
         Map<ClothingCategory, List<WardrobeItem>> byCategory = new LinkedHashMap<>();
         for (WardrobeItem item : all) {
             byCategory.computeIfAbsent(item.getCategory(), k -> new ArrayList<>()).add(item);
         }
-
         List<WardrobeItem> look = new ArrayList<>();
-        // Base: a dress, or a top + bottom.
         Optional<WardrobeItem> dress = first(byCategory, ClothingCategory.DRESSES);
         if (dress.isPresent()) {
             look.add(dress.get());
@@ -74,20 +109,38 @@ public class OutfitService {
             first(byCategory, ClothingCategory.TOPS).ifPresent(look::add);
             first(byCategory, ClothingCategory.BOTTOMS).ifPresent(look::add);
         }
-        // Complete the look (FR-08).
         first(byCategory, ClothingCategory.OUTERWEAR).ifPresent(look::add);
         first(byCategory, ClothingCategory.SHOES).ifPresent(look::add);
         first(byCategory, ClothingCategory.BAGS).ifPresent(look::add);
         first(byCategory, ClothingCategory.JEWELRY).ifPresent(look::add);
         first(byCategory, ClothingCategory.ACCESSORIES).ifPresent(look::add);
-
-        String occasion = request != null && request.occasion() != null && !request.occasion().isBlank()
-                ? request.occasion()
-                : (request != null && request.prompt() != null ? request.prompt() : "your day");
-        String rationale = "A complete look for " + occasion.trim()
+        String rationale = "A complete look for " + occasion
                 + " built from " + look.size() + " pieces you already own.";
-
         return new GeneratedLook("Look 1", rationale, look.stream().map(this::toResponse).toList());
+    }
+
+    private static String occasionOf(GetReadyRequest request) {
+        if (request == null) return "your day";
+        if (notBlank(request.occasion())) return request.occasion().trim();
+        if (notBlank(request.prompt())) return request.prompt().trim();
+        return "your day";
+    }
+
+    private static List<OutfitCandidate> toCandidates(List<WardrobeItem> items) {
+        List<OutfitCandidate> out = new ArrayList<>();
+        for (WardrobeItem i : items) {
+            out.add(new OutfitCandidate(
+                    i.getId().toString(),
+                    i.getName(),
+                    i.getCategory().name().toLowerCase(),
+                    i.getSubcategory(),
+                    i.getColors(), i.getStyles(), i.getSeasons()));
+        }
+        return out;
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     @Transactional
