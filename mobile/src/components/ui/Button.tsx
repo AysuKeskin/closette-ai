@@ -11,8 +11,6 @@ import { AppText } from './AppText';
 import { Icon, IconName } from './Icon';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
-
-type Variant = 'primary' | 'secondary' | 'ghost';
 type Size = 'md' | 'sm';
 
 type Props = {
