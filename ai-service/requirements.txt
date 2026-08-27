@@ -6,13 +6,11 @@ pydantic-settings==2.5.2
 httpx==0.27.2
 pytest==8.3.3
 
-# Classic image tools — the "compute with code, not AI" layer (no GPU, no model).
-# Color extraction + canonical normalization run entirely on these.
+# Classic image tools (the "compute with code, not AI" layer; no GPU, no model).
+# Colour extraction + canonical normalization run entirely on these.
 Pillow==10.4.0
 numpy==2.1.1
 
-# Fashion embeddings (self-host, no API key). Only loaded when
-# EMBED_PROVIDER=fashionsiglip; CPU works (slower). Heavy install (~torch).
-open_clip_torch==2.26.1
-torch==2.4.1
-pillow-heif==1.5.0
+# Heavy, OPTIONAL runtime extras (self-hosted embeddings + HEIC decoding) live in
+# requirements-ml.txt. The test suite never loads a model (mock provider) and its
+# imports are lazy/guarded, so CI installs only the light deps above.
