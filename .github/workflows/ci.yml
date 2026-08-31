@@ -97,10 +97,17 @@ jobs:
         working-directory: mobile
         run: npm ci
 
-      # No test runner yet — the type checker is the mobile gate.
+      # No test runner yet — the type checker is the mobile gate. It also proves
+      # the two dictionaries have the same keys, since `tr` is typed as `en`.
       - name: typecheck
         working-directory: mobile
-        run: npx tsc --noEmit
+        run: npm run typecheck
+
+      # What types cannot see: placeholders inside a string, and Turkish lines
+      # left as their English original.
+      - name: i18n check
+        working-directory: mobile
+        run: npm run check:i18n
 
   secret-scan:
     name: secret scan
@@ -128,18 +135,20 @@ jobs:
       - name: start the stack
         run: |
           cp .env.example .env
-          docker compose --profile app up -d --build
+          # -f docker-compose.yml skips the dev override, so CI runs the same
+          # topology as production: the AI service has no published port.
+          docker compose -f docker-compose.yml --profile app up -d --build
 
       - name: run the smoke test
         run: bash .github/scripts/smoke.sh
 
       - name: dump container logs on failure
         if: failure()
-        run: docker compose --profile app logs --tail 200
+        run: docker compose -f docker-compose.yml --profile app logs --tail 200
 
       - name: tear down
         if: always()
-        run: docker compose --profile app down -v
+        run: docker compose -f docker-compose.yml --profile app down -v
 
   build-scan-push:
     name: build, scan, push (${{ matrix.component }})

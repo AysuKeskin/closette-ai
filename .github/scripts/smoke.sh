@@ -9,7 +9,18 @@
 set -euo pipefail
 
 API="${API:-http://localhost:8080}"
-AI="${AI:-http://localhost:8000}"
+# The AI service has no published port (see docker-compose.yml), so it is reached
+# from inside the network — which is also the only way the app can reach it.
+COMPOSE="${COMPOSE:-docker compose -f docker-compose.yml --profile app}"
+
+ai_curl() {
+  $COMPOSE exec -T ai-service python -c "
+import sys, json, urllib.request
+req = urllib.request.Request(sys.argv[1], data=(sys.argv[2].encode() if len(sys.argv) > 2 else None),
+                             headers={'Content-Type': 'application/json'})
+print(urllib.request.urlopen(req, timeout=30).read().decode())
+" "$@"
+}
 
 wait_for() {
   local name="$1" url="$2" attempts="${3:-90}"
@@ -40,12 +51,12 @@ print(data)
 ' "$1"
 }
 
-wait_for "ai-service" "$AI/health"
+# The backend only starts once compose reports the AI service healthy, so waiting
+# on the backend waits on both.
 wait_for "backend" "$API/v3/api-docs"
 
-echo "--- AI service reports its providers ---"
-curl -sf "$AI/health"
-echo
+echo "--- AI service reports its providers (from inside the network) ---"
+ai_curl http://localhost:8000/health
 
 EMAIL="ci-$(date +%s)-$RANDOM@closette.test"
 USERNAME="ci_$(date +%s)$RANDOM"
@@ -102,6 +113,35 @@ curl -sf -X POST "$API/api/outfits/generate" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"occasion":"a CI run"}' | json_field data.rationale > /dev/null
 
+echo "--- the API answers in the language the client asks for ---"
+# Same request, two languages: the message changes, the code never does.
+EN_BODY="$(curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"nobody@closette.test","password":"Password123"}')"
+TR_BODY="$(curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' \
+  -H 'Accept-Language: tr' -d '{"email":"nobody@closette.test","password":"Password123"}')"
+printf '%s' "$EN_BODY" | grep -q 'Invalid email or password' \
+  || { echo "::error::English error message missing: $EN_BODY"; exit 1; }
+printf '%s' "$TR_BODY" | grep -q 'E-posta veya şifre hatalı' \
+  || { echo "::error::Turkish error message missing: $TR_BODY"; exit 1; }
+printf '%s' "$TR_BODY" | grep -q '"UNAUTHORIZED"' \
+  || { echo "::error::error code must not change with the language"; exit 1; }
+
+echo "--- the AI service writes its prose in that language too ---"
+TR_LOOK="$(ai_curl http://localhost:8000/generate/outfit \
+  '{"occasion":"akşam yemeği","lang":"tr","items":[{"id":"a","category":"dresses"}]}')"
+printf '%s' "$TR_LOOK" | grep -q 'kombin' \
+  || { echo "::error::Turkish rationale missing: $TR_LOOK"; exit 1; }
+printf '%s' "$TR_LOOK" | grep -q '"a"' \
+  || { echo "::error::item ids must survive translation: $TR_LOOK"; exit 1; }
+
+echo "--- the AI service is not reachable from outside ---"
+# If this ever succeeds, every quota in the backend can be walked around.
+if curl -sf -m 3 -o /dev/null "http://localhost:${AI_SERVICE_PORT:-8000}/health" 2>/dev/null; then
+  echo "::error::the AI service is published on the host — the backend can be bypassed"
+  exit 1
+fi
+echo "  not published, as intended"
+
 echo "--- auth is actually enforced ---"
 STATUS="$(curl -s -o /dev/null -w '%{http_code}' "$API/api/wardrobe/items")"
 [ "$STATUS" = "401" ] || { echo "::error::unauthenticated request returned $STATUS, expected 401"; exit 1; }
@@ -111,5 +151,6 @@ echo "smoke test passed"
   echo "### Smoke test passed"
   echo "- registered a user, analyzed a photo, saved and re-read the item"
   echo "- pgvector similarity and Get Ready answered"
+  echo "- answered in English and Turkish, with the error code unchanged"
   echo "- unauthenticated access rejected with 401"
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"

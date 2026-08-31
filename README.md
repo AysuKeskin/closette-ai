@@ -52,9 +52,18 @@ uvicorn app.main:app --reload --port 8000     # http://localhost:8000/docs
 
 ### 3. Backend (Spring Boot)
 
+The backend refuses to start on the placeholder `JWT_SECRET` shipped in
+`application.yml` — a public signing key would let anyone mint a token for any
+account. Put a real one in `.env` first:
+
+```bash
+python3 -c "import secrets; print('JWT_SECRET=' + secrets.token_urlsafe(48))" >> .env
+```
+
 ```bash
 cd backend
-./gradlew bootRun             # http://localhost:8080/swagger-ui
+set -a && . ../.env && set +a     # bootRun reads the environment, not .env
+./gradlew bootRun                 # http://localhost:8080/swagger-ui
 ```
 
 Flyway applies the schema (`V1__init.sql`) on first boot.
@@ -106,17 +115,35 @@ Both suites are hermetic: no network, no API key, no model call. The AI service
 pins every provider to its offline mock, and the backend mocks the AI seam, so a
 run means the same thing on a laptop with a live key configured as it does in CI.
 
+## Languages
+
+The app runs fully in **English and Turkish** — UI, backend messages, and the
+prose the AI writes. The language follows the device and can be changed in
+Profile; it travels to the backend as `Accept-Language` and on to the AI service,
+so a model-written rationale reads in the same language as the screen around it.
+
+What never changes with the language: the values an item is catalogued with
+(`navy`, `TOPS`, `minimal`) and the machine-readable error codes. Those are what
+the backend filters on and the client branches on — only the labels move. A
+Turkish user can describe an item in Turkish and it is stored exactly as its
+English equivalent would be.
+
+```bash
+cd mobile && npm run check:i18n   # both dictionaries agree
+curl -H 'Accept-Language: tr' localhost:8080/api/...   # the API answers in Turkish
+```
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request and push to `main`:
 
 | Job | What it guards |
 |---|---|
-| `backend` | `./gradlew build` — compile, 123 tests, bootJar |
-| `ai-service` | `pytest` — 83 tests |
-| `mobile` | `npm ci` + `tsc --noEmit` |
+| `backend` | `./gradlew build` — compile, tests, bootJar |
+| `ai-service` | `pytest` |
+| `mobile` | `npm ci`, typecheck (which enforces en/tr key parity), i18n check |
 | `secret-scan` | Gitleaks over the full history |
-| `smoke` | The compose stack end-to-end: register → analyze a photo → save → read back, over real Postgres/pgvector and MinIO |
+| `smoke` | The compose stack end-to-end: register → analyze a photo → save → read back, over real Postgres/pgvector and MinIO, in both languages |
 | `build-scan-push` | Builds both images, Trivy gate on CRITICAL/HIGH, pushes to GHCR (never from a PR) |
 | `sign-and-sbom` | Keyless cosign signature + SPDX SBOM attested to the image |
 | `release` | On a `v*` tag: GitHub release with CHANGELOG notes and the SBOMs |

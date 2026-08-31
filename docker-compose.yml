@@ -77,8 +77,11 @@ services:
       KIMI_API_KEY: ${KIMI_API_KEY:-}
       SEG_PROVIDER: ${SEG_PROVIDER:-none}
       EMBED_PROVIDER: ${EMBED_PROVIDER:-mock}
-    ports:
-      - "${AI_SERVICE_PORT:-8000}:8000"
+    # Deliberately not published: only the backend needs to reach this, and every
+    # quota lives in the backend. A published port is a way around all of them.
+    # docker-compose.override.yml opens it again for local development.
+    expose:
+      - "8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -115,7 +118,12 @@ services:
       MINIO_BUCKET_WARDROBE: ${MINIO_BUCKET_WARDROBE:-wardrobe}
       MINIO_BUCKET_BEAUTY: ${MINIO_BUCKET_BEAUTY:-beauty}
       AI_SERVICE_BASE_URL: http://ai-service:8000
-      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret-at-least-256-bits-long-000000}
+      JWT_SECRET: ${JWT_SECRET:?set a real JWT_SECRET in .env — the app refuses to start without one}
+      # Without these the container falls back to provider=log and silently sends
+      # nothing: backend/.env is a local-development file and is not in the image.
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-log}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Closette <onboarding@resend.dev>}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-60}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
     ports:
