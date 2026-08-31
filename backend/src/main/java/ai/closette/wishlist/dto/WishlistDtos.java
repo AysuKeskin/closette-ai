@@ -14,7 +14,7 @@ public final class WishlistDtos {
     }
 
     public record CreateWishlistItemRequest(
-            @NotBlank(message = "Product name is required") String productName,
+            @NotBlank(message = "{validation.productName.required}") String productName,
             String brand,
             BigDecimal price,
             String category,

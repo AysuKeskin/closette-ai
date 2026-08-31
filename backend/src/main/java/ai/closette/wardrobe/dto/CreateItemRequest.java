@@ -11,10 +11,10 @@ import java.util.List;
  * analysis result plus the {@code imageKey} returned by the analyze step.
  */
 public record CreateItemRequest(
-        @NotBlank(message = "Name is required")
+        @NotBlank(message = "{validation.name.required}")
         String name,
 
-        @NotNull(message = "Category is required")
+        @NotNull(message = "{validation.category.required}")
         ClothingCategory category,
 
         String subcategory,

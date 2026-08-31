@@ -73,6 +73,29 @@ class RecommendationServiceTest {
     }
 
     @Test
+    void describingAnItemDegradesGracefullyWhenTheAiIsDown() {
+        // The AI parse is unreachable in tests, so attributes can't be extracted — but the
+        // feature must still answer (best-effort) and echo back what the user typed.
+        UUID userId = verifiedUser();
+        addItem(userId, "Black tee", ClothingCategory.TOPS, List.of("black"), List.of("minimal"));
+
+        ShouldIBuyResponse response = recommendationService.shouldIBuyFromDescription(userId, "a black minimal top");
+
+        assertThat(response).isNotNull();
+        assertThat(response.detectedLabel()).contains("black minimal top");
+        assertThat(response.verdict()).isIn("buy", "maybe", "skip");
+    }
+
+    @Test
+    void describingAnItemIsAlsoGatedOnEmailVerification() {
+        UUID unverified = TestData.newUser(authService);
+
+        assertThatThrownBy(() -> recommendationService.shouldIBuyFromDescription(unverified, "a beige blazer"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED));
+    }
+
+    @Test
     void anEmptyWardrobeHasNothingToCompareAgainst() {
         ShouldIBuyResponse response = recommendationService.shouldIBuy(verifiedUser(),
                 new ShouldIBuyRequest(ClothingCategory.TOPS, List.of("black"), List.of("minimal")));
@@ -83,16 +106,18 @@ class RecommendationServiceTest {
     }
 
     @Test
-    void theScoreIsTheShareOfOwnedItemsTheCandidateWorksWith() {
+    void theScoreIsTheShareOfTheCandidatesTagsAlreadyOwned() {
+        // Fit measures the candidate's own colours/styles, not wardrobe size: here one of the
+        // candidate's two colours (black) is owned and one (emerald) is not, so 50%.
         UUID userId = verifiedUser();
         addItem(userId, "Black tee", ClothingCategory.TOPS, List.of("black"), List.of("minimal"));
         addItem(userId, "Red skirt", ClothingCategory.BOTTOMS, List.of("red"), List.of("bold"));
 
         ShouldIBuyResponse response = recommendationService.shouldIBuy(userId,
-                new ShouldIBuyRequest(ClothingCategory.BAGS, List.of("black"), List.of()));
+                new ShouldIBuyRequest(ClothingCategory.BAGS, List.of("black", "emerald"), List.of()));
 
-        assertThat(response.matchingItemCount()).isEqualTo(1);
-        assertThat(response.matchScore()).isEqualTo(50); // 1 of 2 items
+        assertThat(response.matchingItemCount()).isEqualTo(1); // pairs with the black tee
+        assertThat(response.matchScore()).isEqualTo(50); // 1 of the candidate's 2 tags owned
     }
 
     @Test
@@ -118,7 +143,7 @@ class RecommendationServiceTest {
     }
 
     @Test
-    void similarItemsAreOnlyThoseInTheSameCategoryAndColor() {
+    void similarItemsAreOnlyThoseInTheSameCategory() {
         // "You already own something like this" is the strongest signal not to buy,
         // so it must not fire on a black bag when the candidate is a black top.
         UUID userId = verifiedUser();
@@ -130,7 +155,7 @@ class RecommendationServiceTest {
 
         assertThat(response.similarItemCount()).isEqualTo(1);
         assertThat(response.similarItems()).extracting(WardrobeItemResponse::name).containsExactly("Black tee");
-        assertThat(response.explanation()).contains("1 similar item");
+        assertThat(response.explanation()).contains("1 similar top");
     }
 
     @Test
@@ -143,9 +168,9 @@ class RecommendationServiceTest {
                 new ShouldIBuyRequest(ClothingCategory.SHOES, List.of("black"), List.of()));
 
         assertThat(response.explanation())
-                .contains("Works with 2 items")
-                .contains("tops")
-                .contains("bottoms");
+                .contains("pairs with 2 items")
+                .contains("1 top")
+                .contains("1 bottom");
     }
 
     @Test
@@ -157,7 +182,7 @@ class RecommendationServiceTest {
                 new ShouldIBuyRequest(ClothingCategory.TOPS, List.of("sage"), List.of("classic")));
 
         assertThat(response.matchScore()).isZero();
-        assertThat(response.explanation()).contains("doesn't obviously match anything");
+        assertThat(response.explanation()).contains("doesn't match your palette much");
     }
 
     @Test
@@ -166,7 +191,7 @@ class RecommendationServiceTest {
         UUID itemId = addItem(userId, "Black dress", ClothingCategory.DRESSES,
                 List.of("black"), List.of("minimal"));
         OutfitResponse outfit = outfitService.save(userId,
-                new SaveOutfitRequest("Date night", "dinner", List.of(itemId), null));
+                new SaveOutfitRequest("Date night", "dinner", null, List.of(itemId), null));
         outfitService.feedback(userId, new FeedbackRequest(outfit.id(), FeedbackSignal.LOVE));
 
         List<PreferenceEntry> profile = recommendationService.recomputeProfile(userId);
@@ -184,9 +209,9 @@ class RecommendationServiceTest {
         UUID dislikedId = addItem(userId, "Neon top", ClothingCategory.TOPS,
                 List.of("coral"), List.of("bold"));
         OutfitResponse loved = outfitService.save(userId,
-                new SaveOutfitRequest("Loved", "dinner", List.of(lovedId), null));
+                new SaveOutfitRequest("Loved", "dinner", null, List.of(lovedId), null));
         OutfitResponse disliked = outfitService.save(userId,
-                new SaveOutfitRequest("Disliked", "party", List.of(dislikedId), null));
+                new SaveOutfitRequest("Disliked", "party", null, List.of(dislikedId), null));
         outfitService.feedback(userId, new FeedbackRequest(loved.id(), FeedbackSignal.LOVE));
         outfitService.feedback(userId, new FeedbackRequest(disliked.id(), FeedbackSignal.DISLIKE));
 
@@ -204,9 +229,9 @@ class RecommendationServiceTest {
         UUID blackId = addItem(userId, "Black dress", ClothingCategory.DRESSES, List.of("black"), List.of());
         UUID navyId = addItem(userId, "Navy coat", ClothingCategory.OUTERWEAR, List.of("navy"), List.of());
         OutfitResponse blackLook = outfitService.save(userId,
-                new SaveOutfitRequest("Black", "dinner", List.of(blackId), null));
+                new SaveOutfitRequest("Black", "dinner", null, List.of(blackId), null));
         OutfitResponse navyLook = outfitService.save(userId,
-                new SaveOutfitRequest("Navy", "work", List.of(navyId), null));
+                new SaveOutfitRequest("Navy", "work", null, List.of(navyId), null));
         outfitService.feedback(userId, new FeedbackRequest(blackLook.id(), FeedbackSignal.LOVE));  // +2
         outfitService.feedback(userId, new FeedbackRequest(navyLook.id(), FeedbackSignal.LIKE));   // +1
 
@@ -223,7 +248,7 @@ class RecommendationServiceTest {
         UUID itemId = addItem(userId, "Black dress", ClothingCategory.DRESSES,
                 List.of("black"), List.of("minimal"));
         OutfitResponse outfit = outfitService.save(userId,
-                new SaveOutfitRequest("Date night", "dinner", List.of(itemId), null));
+                new SaveOutfitRequest("Date night", "dinner", null, List.of(itemId), null));
         outfitService.feedback(userId, new FeedbackRequest(outfit.id(), FeedbackSignal.LOVE));
         assertThat(recommendationService.recomputeProfile(userId)).isNotEmpty();
 
@@ -242,7 +267,7 @@ class RecommendationServiceTest {
         UUID itemId = addItem(owner, "Black dress", ClothingCategory.DRESSES,
                 List.of("black"), List.of("minimal"));
         OutfitResponse outfit = outfitService.save(owner,
-                new SaveOutfitRequest("Date night", "dinner", List.of(itemId), null));
+                new SaveOutfitRequest("Date night", "dinner", null, List.of(itemId), null));
         outfitService.feedback(owner, new FeedbackRequest(outfit.id(), FeedbackSignal.LOVE));
 
         recommendationService.recomputeProfile(owner);

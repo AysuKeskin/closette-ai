@@ -11,7 +11,7 @@ public class ClosetteProperties {
     private Jwt jwt = new Jwt();
     private Ai ai = new Ai();
     private Storage storage = new Storage();
-    private RateLimit ratelimit = new RateLimit();
+    private RateLimits ratelimit = new RateLimits();
 
     public Jwt getJwt() {
         return jwt;
@@ -37,11 +37,11 @@ public class ClosetteProperties {
         this.storage = storage;
     }
 
-    public RateLimit getRatelimit() {
+    public RateLimits getRatelimit() {
         return ratelimit;
     }
 
-    public void setRatelimit(RateLimit ratelimit) {
+    public void setRatelimit(RateLimits ratelimit) {
         this.ratelimit = ratelimit;
     }
 
@@ -153,15 +153,151 @@ public class ClosetteProperties {
         }
     }
 
-    public static class RateLimit {
-        private int aiRequestsPerMinute = 20;
+    /**
+     * Budgets, in the cost units declared on each endpoint. Every bucket carries
+     * three windows: the minute stops hammering, the day caps one day's bill, and
+     * the week stops someone spending the daily maximum seven days running.
+     */
+    public static class RateLimits {
 
-        public int getAiRequestsPerMinute() {
-            return aiRequestsPerMinute;
+        public enum Mode {
+            /** Count and log overruns, let everything through. Use this first. */
+            LOG,
+            /** Reject with 429 once a window is spent. */
+            ENFORCE
         }
 
-        public void setAiRequestsPerMinute(int aiRequestsPerMinute) {
-            this.aiRequestsPerMinute = aiRequestsPerMinute;
+        private Mode mode = Mode.LOG;
+        private Window user = new Window(50, 288, 900);
+        private Window unverifiedUser = new Window(20, 30, 60);
+        private Window ip = new Window(120, 900, 2500);
+        private Window verifyCode = new Window(5, 20, 40);
+        private Window registerIp = new Window(3, 10, 25);
+        private Window loginIp = new Window(10, 200, 600);
+        // Per-email so one address can't be hammered, but generous enough that an
+        // attacker targeting someone else's email cannot lock them out for long.
+        private Window loginEmail = new Window(5, 50, 150);
+        private Window passwordResetIp = new Window(3, 15, 40);
+        private Window passwordResetEmail = new Window(1, 5, 15);
+
+        public Mode getMode() {
+            return mode;
+        }
+
+        public void setMode(Mode mode) {
+            this.mode = mode;
+        }
+
+        public Window getUser() {
+            return user;
+        }
+
+        public void setUser(Window user) {
+            this.user = user;
+        }
+
+        public Window getUnverifiedUser() {
+            return unverifiedUser;
+        }
+
+        public void setUnverifiedUser(Window unverifiedUser) {
+            this.unverifiedUser = unverifiedUser;
+        }
+
+        public Window getIp() {
+            return ip;
+        }
+
+        public void setIp(Window ip) {
+            this.ip = ip;
+        }
+
+        public Window getVerifyCode() {
+            return verifyCode;
+        }
+
+        public void setVerifyCode(Window verifyCode) {
+            this.verifyCode = verifyCode;
+        }
+
+        public Window getRegisterIp() {
+            return registerIp;
+        }
+
+        public void setRegisterIp(Window registerIp) {
+            this.registerIp = registerIp;
+        }
+
+        public Window getLoginIp() {
+            return loginIp;
+        }
+
+        public void setLoginIp(Window loginIp) {
+            this.loginIp = loginIp;
+        }
+
+        public Window getLoginEmail() {
+            return loginEmail;
+        }
+
+        public void setLoginEmail(Window loginEmail) {
+            this.loginEmail = loginEmail;
+        }
+
+        public Window getPasswordResetIp() {
+            return passwordResetIp;
+        }
+
+        public void setPasswordResetIp(Window passwordResetIp) {
+            this.passwordResetIp = passwordResetIp;
+        }
+
+        public Window getPasswordResetEmail() {
+            return passwordResetEmail;
+        }
+
+        public void setPasswordResetEmail(Window passwordResetEmail) {
+            this.passwordResetEmail = passwordResetEmail;
+        }
+
+        /** The three windows of one budget. A zero or negative value disables that window. */
+        public static class Window {
+            private int perMinute;
+            private int perDay;
+            private int perWeek;
+
+            public Window() {
+            }
+
+            public Window(int perMinute, int perDay, int perWeek) {
+                this.perMinute = perMinute;
+                this.perDay = perDay;
+                this.perWeek = perWeek;
+            }
+
+            public int getPerMinute() {
+                return perMinute;
+            }
+
+            public void setPerMinute(int perMinute) {
+                this.perMinute = perMinute;
+            }
+
+            public int getPerDay() {
+                return perDay;
+            }
+
+            public void setPerDay(int perDay) {
+                this.perDay = perDay;
+            }
+
+            public int getPerWeek() {
+                return perWeek;
+            }
+
+            public void setPerWeek(int perWeek) {
+                this.perWeek = perWeek;
+            }
         }
     }
 }

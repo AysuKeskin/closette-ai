@@ -7,6 +7,9 @@ import ai.closette.auth.dto.RefreshRequest;
 import ai.closette.auth.dto.RegisterRequest;
 import ai.closette.auth.dto.ResetPasswordRequest;
 import ai.closette.common.exception.ApiException;
+import ai.closette.common.exception.MessageKeys;
+import ai.closette.common.ratelimit.RateLimitBucket;
+import ai.closette.common.ratelimit.RateLimiter;
 import ai.closette.common.exception.ErrorCode;
 import ai.closette.email.EmailSender;
 import ai.closette.user.model.User;
@@ -33,17 +36,20 @@ public class AuthService {
     private final JwtService jwtService;
     private final EmailVerificationService emailVerificationService;
     private final EmailSender emailSender;
+    private final RateLimiter rateLimiter;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        EmailVerificationService emailVerificationService,
-                       EmailSender emailSender) {
+                       EmailSender emailSender,
+                       RateLimiter rateLimiter) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.emailVerificationService = emailVerificationService;
         this.emailSender = emailSender;
+        this.rateLimiter = rateLimiter;
     }
 
     @Transactional
@@ -51,10 +57,10 @@ public class AuthService {
         String email = request.email().trim().toLowerCase();
         String username = request.username().trim();
         if (userRepository.existsByEmailIgnoreCase(email)) {
-            throw ApiException.conflict("email: An account with this email already exists");
+            throw ApiException.conflict(MessageKeys.AUTH_EMAIL_TAKEN);
         }
         if (userRepository.existsByUsernameIgnoreCase(username)) {
-            throw ApiException.conflict("username: This username is already taken");
+            throw ApiException.conflict(MessageKeys.AUTH_USERNAME_TAKEN);
         }
         User user = new User(
                 email,
@@ -69,10 +75,13 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
+        String email = request.email().trim().toLowerCase();
+        rateLimiter.enforce(RateLimitBucket.LOGIN, "email", email,
+                rateLimiter.config().getLoginEmail(), 1, "login");
         User user = userRepository.findByEmailIgnoreCase(request.email().trim())
-                .orElseThrow(() -> ApiException.unauthorized("Invalid email or password"));
+                .orElseThrow(() -> ApiException.unauthorized(MessageKeys.AUTH_INVALID_CREDENTIALS));
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw ApiException.unauthorized("Invalid email or password");
+            throw ApiException.unauthorized(MessageKeys.AUTH_INVALID_CREDENTIALS);
         }
         return issueTokens(user);
     }
@@ -81,10 +90,10 @@ public class AuthService {
     public AuthResponse refresh(RefreshRequest request) {
         UUID userId = jwtService.parseRefreshToken(request.refreshToken());
         if (userId == null) {
-            throw ApiException.unauthorized("Invalid or expired refresh token");
+            throw ApiException.unauthorized(MessageKeys.AUTH_INVALID_REFRESH_TOKEN);
         }
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> ApiException.unauthorized("Invalid refresh token"));
+                .orElseThrow(() -> ApiException.unauthorized(MessageKeys.AUTH_INVALID_REFRESH_TOKEN));
         return issueTokens(user);
     }
 
@@ -95,6 +104,8 @@ public class AuthService {
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         String email = request.email().trim();
+        rateLimiter.enforce(RateLimitBucket.PASSWORD_RESET, "email", email.toLowerCase(),
+                rateLimiter.config().getPasswordResetEmail(), 1, "forgot-password");
         userRepository.findByEmailIgnoreCase(email).ifPresent(user -> {
             String code = String.format("%06d", RANDOM.nextInt(1_000_000));
             Instant now = Instant.now();
@@ -110,23 +121,19 @@ public class AuthService {
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         User user = userRepository.findByEmailIgnoreCase(request.email().trim())
-                .orElseThrow(() -> validation("code: That code is incorrect"));
+                .orElseThrow(() -> ApiException.validation(MessageKeys.AUTH_CODE_INCORRECT));
         String code = user.getResetCode();
         Instant expiresAt = user.getResetExpiresAt();
         if (code == null || expiresAt == null || expiresAt.isBefore(Instant.now())) {
-            throw validation("code: This code has expired — request a new one");
+            throw ApiException.validation(MessageKeys.AUTH_CODE_EXPIRED);
         }
         if (!code.equals(request.code().trim())) {
-            throw validation("code: That code is incorrect");
+            throw ApiException.validation(MessageKeys.AUTH_CODE_INCORRECT);
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         user.setResetCode(null);
         user.setResetExpiresAt(null);
         userRepository.save(user);
-    }
-
-    private static ApiException validation(String message) {
-        return new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, message);
     }
 
     private AuthResponse issueTokens(User user) {

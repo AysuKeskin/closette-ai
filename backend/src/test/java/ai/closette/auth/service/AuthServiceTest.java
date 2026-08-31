@@ -8,6 +8,7 @@ import ai.closette.auth.dto.RegisterRequest;
 import ai.closette.auth.dto.ResetPasswordRequest;
 import ai.closette.common.exception.ApiException;
 import ai.closette.common.exception.ErrorCode;
+import ai.closette.common.exception.MessageKeys;
 import ai.closette.user.model.User;
 import ai.closette.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -76,15 +77,16 @@ class AuthServiceTest {
     }
 
     @Test
-    void duplicateEmailIsRejectedWithAFieldPrefixedMessage() {
+    void duplicateEmailIsRejected() {
         String email = uniqueEmail();
         authService.register(registration(email, uniqueUsername()));
 
         assertThatThrownBy(() -> authService.register(registration(email.toUpperCase(), uniqueUsername())))
                 .isInstanceOfSatisfying(ApiException.class, ex -> {
                     assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT);
-                    // Prefix is what puts the message under the email input.
-                    assertThat(ex.getMessage()).startsWith("email:");
+                    // Services carry keys; the sentence (and its "email:" prefix)
+                    // is resolved per language in GlobalExceptionHandlerTest.
+                    assertThat(ex.getMessageKey()).isEqualTo(MessageKeys.AUTH_EMAIL_TAKEN);
                 });
     }
 
@@ -95,7 +97,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.register(registration(uniqueEmail(), username.toUpperCase())))
                 .isInstanceOfSatisfying(ApiException.class,
-                        ex -> assertThat(ex.getMessage()).startsWith("username:"));
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKeys.AUTH_USERNAME_TAKEN));
     }
 
     @Test
@@ -117,7 +119,7 @@ class AuthServiceTest {
         Throwable wrongPassword = catchApiException(() -> authService.login(new LoginRequest(email, "Wrong12345")));
         Throwable unknownEmail = catchApiException(() -> authService.login(new LoginRequest(uniqueEmail(), "Password123")));
 
-        assertThat(wrongPassword).hasMessage("Invalid email or password");
+        assertThat(wrongPassword).hasMessage(MessageKeys.AUTH_INVALID_CREDENTIALS);
         assertThat(unknownEmail).hasMessage(wrongPassword.getMessage());
     }
 
@@ -189,7 +191,7 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.resetPassword(new ResetPasswordRequest(email, wrongCode, "NewPassword1")))
                 .isInstanceOfSatisfying(ApiException.class, ex -> {
                     assertThat(ex.getCode()).isEqualTo(ErrorCode.VALIDATION);
-                    assertThat(ex.getMessage()).startsWith("code:");
+                    assertThat(ex.getMessageKey()).isEqualTo(MessageKeys.AUTH_CODE_INCORRECT);
                 });
     }
 
@@ -204,7 +206,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.resetPassword(
                 new ResetPasswordRequest(email, user.getResetCode(), "NewPassword1")))
-                .hasMessageContaining("expired");
+                .hasMessage(MessageKeys.AUTH_CODE_EXPIRED);
     }
 
     @Test
@@ -212,7 +214,7 @@ class AuthServiceTest {
         // Same failure as a bad code, so the response can't confirm the address.
         assertThatThrownBy(() -> authService.resetPassword(
                 new ResetPasswordRequest(uniqueEmail(), "123456", "NewPassword1")))
-                .hasMessage("code: That code is incorrect");
+                .hasMessage(MessageKeys.AUTH_CODE_INCORRECT);
     }
 
     private static Throwable catchApiException(Runnable action) {

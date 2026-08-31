@@ -1,6 +1,7 @@
 package ai.closette.auth.service;
 
 import ai.closette.common.exception.ApiException;
+import ai.closette.common.exception.MessageKeys;
 import ai.closette.user.model.User;
 import ai.closette.user.repository.UserRepository;
 import org.springframework.stereotype.Component;
@@ -23,10 +24,9 @@ public class AccountGuard {
 
     public void requireVerifiedEmail(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> ApiException.notFound("User not found"));
+                .orElseThrow(() -> ApiException.notFound(MessageKeys.USER_NOT_FOUND));
         if (!user.isEmailVerified()) {
-            throw ApiException.emailNotVerified(
-                    "Verify your email to use the shopping assistant");
+            throw ApiException.emailNotVerified(MessageKeys.AUTH_EMAIL_NOT_VERIFIED);
         }
     }
 }

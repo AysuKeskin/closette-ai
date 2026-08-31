@@ -1,6 +1,7 @@
 package ai.closette.wishlist.service;
 
 import ai.closette.common.exception.ApiException;
+import ai.closette.common.exception.MessageKeys;
 import ai.closette.storage.service.StorageService;
 import ai.closette.wishlist.dto.WishlistDtos.CreateWishlistItemRequest;
 import ai.closette.wishlist.dto.WishlistDtos.WishlistItemResponse;
@@ -42,7 +43,7 @@ public class WishlistService {
     @Transactional
     public void delete(UUID userId, UUID id) {
         WishlistItem item = repository.findByIdAndUserId(id, userId)
-                .orElseThrow(() -> ApiException.notFound("Wishlist item not found"));
+                .orElseThrow(() -> ApiException.notFound(MessageKeys.WISHLIST_NOT_FOUND));
         repository.delete(item);
     }
 

@@ -7,6 +7,7 @@ import ai.closette.auth.service.AuthService;
 import ai.closette.beauty.dto.BeautyAnalyzeResponse;
 import ai.closette.beauty.dto.BeautyItemResponse;
 import ai.closette.beauty.dto.CreateBeautyItemRequest;
+import ai.closette.beauty.dto.UpdateBeautyItemRequest;
 import ai.closette.beauty.model.BeautyCategory;
 import ai.closette.common.exception.ApiException;
 import ai.closette.common.exception.ErrorCode;
@@ -62,7 +63,7 @@ class BeautyServiceTest {
     }
 
     private static CreateBeautyItemRequest request(String productName, BeautyCategory category) {
-        return new CreateBeautyItemRequest("CeraVe", productName, category, null, "50ml",
+        return new CreateBeautyItemRequest("CeraVe", productName, category, null, null, "50ml",
                 List.of("niacinamide", "ceramide"), LocalDate.of(2026, 1, 5), null, null, 12, 80, false);
     }
 
@@ -85,10 +86,11 @@ class BeautyServiceTest {
         UUID userId = newUser();
 
         BeautyItemResponse created = beautyService.create(userId, new CreateBeautyItemRequest(
-                "   ", "  Lip Balm  ", BeautyCategory.MAKEUP, "  ", "  ",
+                "   ", "  Lip Balm  ", BeautyCategory.MAKEUP, "  ", "  ", "  ",
                 null, null, null, null, null, null, null));
 
         assertThat(created.productName()).isEqualTo("Lip Balm");
+        assertThat(created.imageUrl()).isNull();
         assertThat(created.brand()).isNull();
         assertThat(created.size()).isNull();
         assertThat(created.favorite()).isFalse();
@@ -100,10 +102,44 @@ class BeautyServiceTest {
         beautyService.create(userId, request("Moisturizing Cream", BeautyCategory.SKINCARE));
         beautyService.create(userId, request("Lip Balm", BeautyCategory.MAKEUP));
 
-        assertThat(beautyService.list(userId, null)).hasSize(2);
-        assertThat(beautyService.list(userId, BeautyCategory.MAKEUP))
+        assertThat(beautyService.list(userId, null, null)).hasSize(2);
+        assertThat(beautyService.list(userId, BeautyCategory.MAKEUP, null))
                 .extracting(BeautyItemResponse::productName).containsExactly("Lip Balm");
-        assertThat(beautyService.list(userId, BeautyCategory.PERFUME)).isEmpty();
+        assertThat(beautyService.list(userId, BeautyCategory.PERFUME, null)).isEmpty();
+    }
+
+    @Test
+    void favouritingAProductFlipsBothWays() {
+        UUID userId = newUser();
+        BeautyItemResponse created = beautyService.create(userId, request("Lip Balm", BeautyCategory.MAKEUP));
+
+        assertThat(beautyService.toggleFavorite(userId, created.id()).favorite()).isTrue();
+        assertThat(beautyService.toggleFavorite(userId, created.id()).favorite()).isFalse();
+    }
+
+    @Test
+    void theFavouritesFilterCombinesWithTheCategoryFilter() {
+        UUID userId = newUser();
+        BeautyItemResponse cream = beautyService.create(userId, request("Cream", BeautyCategory.SKINCARE));
+        beautyService.create(userId, request("Lip Balm", BeautyCategory.MAKEUP));
+        beautyService.toggleFavorite(userId, cream.id());
+
+        assertThat(beautyService.list(userId, null, true))
+                .extracting(BeautyItemResponse::productName).containsExactly("Cream");
+        assertThat(beautyService.list(userId, BeautyCategory.SKINCARE, true))
+                .extracting(BeautyItemResponse::productName).containsExactly("Cream");
+        assertThat(beautyService.list(userId, BeautyCategory.MAKEUP, true)).isEmpty();
+        // A false/absent flag must not silently mean "favourites only".
+        assertThat(beautyService.list(userId, null, false)).hasSize(2);
+    }
+
+    @Test
+    void anotherUsersProductCannotBeFavourited() {
+        UUID owner = newUser();
+        UUID stranger = newUser();
+        BeautyItemResponse created = beautyService.create(owner, request("Lip Balm", BeautyCategory.MAKEUP));
+
+        assertNotFound(() -> beautyService.toggleFavorite(stranger, created.id()));
     }
 
     @Test
@@ -113,7 +149,7 @@ class BeautyServiceTest {
 
         beautyService.delete(userId, created.id());
 
-        assertThat(beautyService.list(userId, null)).isEmpty();
+        assertThat(beautyService.list(userId, null, null)).isEmpty();
     }
 
     @Test
@@ -122,7 +158,7 @@ class BeautyServiceTest {
         UUID stranger = newUser();
         BeautyItemResponse created = beautyService.create(owner, request("Lip Balm", BeautyCategory.MAKEUP));
 
-        assertThat(beautyService.list(stranger, null)).isEmpty();
+        assertThat(beautyService.list(stranger, null, null)).isEmpty();
         assertNotFound(() -> beautyService.get(stranger, created.id()));
         assertNotFound(() -> beautyService.delete(stranger, created.id()));
         assertThat(beautyService.get(owner, created.id()).productName()).isEqualTo("Lip Balm");
@@ -171,6 +207,41 @@ class BeautyServiceTest {
                         ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.VALIDATION));
         assertThatThrownBy(() -> beautyService.explainIngredient(null))
                 .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void updatingAProductChangesOnlyTheProvidedFields() {
+        UUID userId = newUser();
+        BeautyItemResponse created = beautyService.create(userId, request("Cream", BeautyCategory.SKINCARE));
+
+        BeautyItemResponse updated = beautyService.update(userId, created.id(),
+                new UpdateBeautyItemRequest(null, "Rich Cream", null, "100ml", null, true));
+
+        assertThat(updated.productName()).isEqualTo("Rich Cream");
+        assertThat(updated.size()).isEqualTo("100ml");
+        assertThat(updated.favorite()).isTrue();
+        assertThat(updated.brand()).isEqualTo("CeraVe"); // untouched
+    }
+
+    @Test
+    void updatingAnotherUsersProductIsNotFound() {
+        UUID owner = newUser();
+        UUID stranger = newUser();
+        BeautyItemResponse created = beautyService.create(owner, request("Cream", BeautyCategory.SKINCARE));
+
+        assertNotFound(() -> beautyService.update(stranger, created.id(),
+                new UpdateBeautyItemRequest(null, "Hijacked", null, null, null, null)));
+    }
+
+    @Test
+    void scanningIngredientsCleansWhatTheAiRead() {
+        when(aiService.extractIngredients(any(), any(), any()))
+                .thenReturn(List.of("Aqua", ".", "and", "( Niacinamide )"));
+
+        List<String> scanned = beautyService.scanIngredients(
+                new MockMultipartFile("file", "list.jpg", "image/jpeg", new byte[]{1, 2, 3}));
+
+        assertThat(scanned).containsExactly("Aqua", "Niacinamide");
     }
 
     private static void assertNotFound(Runnable action) {

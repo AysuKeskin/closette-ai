@@ -3,6 +3,7 @@ package ai.closette.wardrobe.service;
 import ai.closette.ai.service.AIService;
 import ai.closette.ai.dto.ClothingAnalysis;
 import ai.closette.common.exception.ApiException;
+import ai.closette.common.exception.MessageKeys;
 import ai.closette.storage.service.StorageService;
 import ai.closette.wardrobe.dto.AnalyzeResponse;
 import ai.closette.wardrobe.dto.CreateItemRequest;
@@ -159,7 +160,7 @@ public class WardrobeService {
 
     private WardrobeItem require(UUID userId, UUID id) {
         return repository.findByIdAndUserId(id, userId)
-                .orElseThrow(() -> ApiException.notFound("Item not found"));
+                .orElseThrow(() -> ApiException.notFound(MessageKeys.ITEM_NOT_FOUND));
     }
 
     private WardrobeItemResponse toResponse(WardrobeItem item) {
@@ -200,13 +201,12 @@ public class WardrobeService {
 
     private static byte[] readBytes(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
-                    ai.closette.common.exception.ErrorCode.VALIDATION, "An image file is required");
+            throw ApiException.validation(MessageKeys.IMAGE_REQUIRED);
         }
         try {
             return file.getBytes();
         } catch (IOException e) {
-            throw ApiException.storage("Could not read the uploaded image");
+            throw ApiException.validation(MessageKeys.IMAGE_UNREADABLE);
         }
     }
 

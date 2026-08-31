@@ -34,6 +34,10 @@ public class BeautyItem extends BaseEntity {
     @Column(name = "image_key")
     private String imageKey;
 
+    // External image URL for search-sourced products (no MinIO upload). Falls back here when imageKey is null.
+    @Column(name = "image_url", length = 1000)
+    private String imageUrl;
+
     @Column(name = "size")
     private String size;
 
@@ -102,6 +106,14 @@ public class BeautyItem extends BaseEntity {
 
     public void setImageKey(String imageKey) {
         this.imageKey = imageKey;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public String getSize() {

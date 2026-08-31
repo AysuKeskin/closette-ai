@@ -218,6 +218,20 @@ class OutfitServiceTest {
     }
 
     @Test
+    void aStylistThatUnderstoodNothingDoesNotFabricateALook() {
+        // Gibberish occasion → the AI returns no items on purpose; we must not invent a look.
+        UUID userId = newUser();
+        addItem(userId, "Mini dress", ClothingCategory.DRESSES);
+        when(aiService.generateOutfit(any(), any(), any())).thenReturn(new OutfitSuggestion(
+                List.of(), "Let's try again", "I couldn't tell what to style for that."));
+
+        GeneratedLook look = outfitService.generate(userId, new GetReadyRequest(null, "asdfgh"));
+
+        assertThat(look.items()).isEmpty();
+        assertThat(look.rationale()).contains("couldn't tell");
+    }
+
+    @Test
     void aStylistLookWithoutWordsStillGetsATitleAndARationale() {
         UUID userId = newUser();
         UUID dressId = addItem(userId, "Mini dress", ClothingCategory.DRESSES);
@@ -253,13 +267,18 @@ class OutfitServiceTest {
         UUID bootsId = addItem(userId, "Ankle boots", ClothingCategory.SHOES);
 
         OutfitResponse saved = outfitService.save(userId,
-                new SaveOutfitRequest("Date night", "dinner", List.of(dressId, bootsId), null));
+                new SaveOutfitRequest("Date night", "dinner", "Elevated but comfortable for dinner.",
+                        List.of(dressId, bootsId), null));
 
         assertThat(saved.title()).isEqualTo("Date night");
+        assertThat(saved.rationale()).isEqualTo("Elevated but comfortable for dinner.");
         assertThat(saved.status()).isEqualTo(OutfitStatus.SAVED); // default when unset
         assertThat(saved.items()).extracting(WardrobeItemResponse::name)
                 .containsExactlyInAnyOrder("Mini dress", "Ankle boots");
-        assertThat(outfitService.list(userId, null, null)).hasSize(1);
+        // Rationale must survive the round-trip through the list query, not just the save call.
+        assertThat(outfitService.list(userId, null, null))
+                .singleElement()
+                .satisfies(o -> assertThat(o.rationale()).isEqualTo("Elevated but comfortable for dinner."));
     }
 
     @Test
@@ -267,8 +286,8 @@ class OutfitServiceTest {
         UUID userId = newUser();
         UUID itemId = addItem(userId, "Mini dress", ClothingCategory.DRESSES);
         OutfitResponse saved = outfitService.save(userId,
-                new SaveOutfitRequest("Saved look", "dinner", List.of(itemId), OutfitStatus.SAVED));
-        outfitService.save(userId, new SaveOutfitRequest("Worn look", "work", List.of(itemId), OutfitStatus.WORN));
+                new SaveOutfitRequest("Saved look", "dinner", null, List.of(itemId), OutfitStatus.SAVED));
+        outfitService.save(userId, new SaveOutfitRequest("Worn look", "work", null, List.of(itemId), OutfitStatus.WORN));
         outfitService.toggleFavorite(userId, saved.id());
 
         assertThat(outfitService.list(userId, OutfitStatus.WORN, null))
@@ -283,7 +302,7 @@ class OutfitServiceTest {
         UUID userId = newUser();
         UUID itemId = addItem(userId, "Mini dress", ClothingCategory.DRESSES);
         OutfitResponse saved = outfitService.save(userId,
-                new SaveOutfitRequest("Date night", "dinner", List.of(itemId), null));
+                new SaveOutfitRequest("Date night", "dinner", null, List.of(itemId), null));
 
         OutfitResponse worn = outfitService.markWorn(userId, saved.id());
 
@@ -301,7 +320,7 @@ class OutfitServiceTest {
         UUID userId = newUser();
         UUID itemId = addItem(userId, "Mini dress", ClothingCategory.DRESSES);
         OutfitResponse saved = outfitService.save(userId,
-                new SaveOutfitRequest("Date night", "dinner", List.of(itemId), null));
+                new SaveOutfitRequest("Date night", "dinner", null, List.of(itemId), null));
 
         outfitService.feedback(userId, new FeedbackRequest(saved.id(), FeedbackSignal.LOVE));
 
@@ -315,7 +334,7 @@ class OutfitServiceTest {
         UUID userId = newUser();
         UUID itemId = addItem(userId, "Mini dress", ClothingCategory.DRESSES);
         OutfitResponse saved = outfitService.save(userId,
-                new SaveOutfitRequest("Date night", "dinner", List.of(itemId), null));
+                new SaveOutfitRequest("Date night", "dinner", null, List.of(itemId), null));
 
         assertThat(outfitService.toggleFavorite(userId, saved.id()).favorite()).isTrue();
         assertThat(outfitService.toggleFavorite(userId, saved.id()).favorite()).isFalse();
@@ -326,7 +345,7 @@ class OutfitServiceTest {
         UUID userId = newUser();
         UUID itemId = addItem(userId, "Mini dress", ClothingCategory.DRESSES);
         OutfitResponse saved = outfitService.save(userId,
-                new SaveOutfitRequest("Date night", "dinner", List.of(itemId), null));
+                new SaveOutfitRequest("Date night", "dinner", null, List.of(itemId), null));
 
         outfitService.delete(userId, saved.id());
 
@@ -339,7 +358,7 @@ class OutfitServiceTest {
         UUID stranger = newUser();
         UUID itemId = addItem(owner, "Mini dress", ClothingCategory.DRESSES);
         OutfitResponse saved = outfitService.save(owner,
-                new SaveOutfitRequest("Private look", "dinner", List.of(itemId), null));
+                new SaveOutfitRequest("Private look", "dinner", null, List.of(itemId), null));
 
         assertThat(outfitService.list(stranger, null, null)).isEmpty();
         assertNotFound(() -> outfitService.toggleFavorite(stranger, saved.id()));
@@ -354,7 +373,7 @@ class OutfitServiceTest {
         UUID keptId = addItem(userId, "Mini dress", ClothingCategory.DRESSES);
         UUID removedId = addItem(userId, "Ankle boots", ClothingCategory.SHOES);
         OutfitResponse saved = outfitService.save(userId,
-                new SaveOutfitRequest("Date night", "dinner", List.of(keptId, removedId), null));
+                new SaveOutfitRequest("Date night", "dinner", null, List.of(keptId, removedId), null));
         wardrobeService.delete(userId, removedId);
 
         assertThat(outfitService.list(userId, null, null))

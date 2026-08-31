@@ -1,6 +1,7 @@
 package ai.closette.outfit.controller;
 
 import ai.closette.common.api.ApiResponse;
+import ai.closette.common.ratelimit.RateLimit;
 import ai.closette.common.security.SecurityUtil;
 import ai.closette.outfit.dto.OutfitDtos.FeedbackRequest;
 import ai.closette.outfit.dto.OutfitDtos.GeneratedLook;
@@ -34,6 +35,7 @@ public class OutfitController {
     }
 
     /** FR-07 — Get Ready: generate a complete look from a described occasion. */
+    @RateLimit(cost = 8)
     @PostMapping("/generate")
     public ApiResponse<GeneratedLook> generate(@RequestBody GetReadyRequest request) {
         return ApiResponse.ok(service.generate(SecurityUtil.currentUserId(), request));

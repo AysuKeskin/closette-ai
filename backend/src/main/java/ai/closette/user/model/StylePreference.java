@@ -30,6 +30,18 @@ public class StylePreference extends BaseEntity {
     @Column(name = "preferred_styles", length = 1000)
     private List<String> preferredStyles = new ArrayList<>();
 
+    @Column(name = "color_season", length = 20)
+    private String colorSeason;
+
+    // Aesthetic-card keys the user swiped right on (e.g. "coquette"); shown back as a recap.
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "loved_aesthetics", length = 1000)
+    private List<String> lovedAesthetics = new ArrayList<>();
+
+    // The user's "dressing up, you reach for…" answer, kept verbatim for the recap.
+    @Column(name = "dress_up", length = 60)
+    private String dressUp;
+
     @Column(name = "onboarding_completed", nullable = false)
     private boolean onboardingCompleted = false;
 
@@ -58,6 +70,30 @@ public class StylePreference extends BaseEntity {
 
     public void setPreferredStyles(List<String> preferredStyles) {
         this.preferredStyles = preferredStyles;
+    }
+
+    public String getColorSeason() {
+        return colorSeason;
+    }
+
+    public void setColorSeason(String colorSeason) {
+        this.colorSeason = colorSeason;
+    }
+
+    public List<String> getLovedAesthetics() {
+        return lovedAesthetics;
+    }
+
+    public void setLovedAesthetics(List<String> lovedAesthetics) {
+        this.lovedAesthetics = lovedAesthetics;
+    }
+
+    public String getDressUp() {
+        return dressUp;
+    }
+
+    public void setDressUp(String dressUp) {
+        this.dressUp = dressUp;
     }
 
     public boolean isOnboardingCompleted() {

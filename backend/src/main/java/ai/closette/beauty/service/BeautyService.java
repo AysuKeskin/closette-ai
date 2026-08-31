@@ -6,10 +6,12 @@ import ai.closette.ai.dto.IngredientExplanation;
 import ai.closette.beauty.dto.BeautyAnalyzeResponse;
 import ai.closette.beauty.dto.BeautyItemResponse;
 import ai.closette.beauty.dto.CreateBeautyItemRequest;
+import ai.closette.beauty.dto.UpdateBeautyItemRequest;
 import ai.closette.beauty.model.BeautyCategory;
 import ai.closette.beauty.model.BeautyItem;
 import ai.closette.beauty.repository.BeautyItemRepository;
 import ai.closette.common.exception.ApiException;
+import ai.closette.common.exception.MessageKeys;
 import ai.closette.common.exception.ErrorCode;
 import ai.closette.storage.service.StorageService;
 import org.springframework.http.HttpStatus;
@@ -18,7 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -50,8 +55,9 @@ public class BeautyService {
         item.setProductName(req.productName().trim());
         item.setCategory(req.category());
         item.setImageKey(trimToNull(req.imageKey()));
+        item.setImageUrl(trimToNull(req.imageUrl()));
         item.setSize(trimToNull(req.size()));
-        if (req.ingredients() != null) item.setIngredients(req.ingredients());
+        if (req.ingredients() != null) item.setIngredients(cleanIngredients(req.ingredients()));
         item.setPurchaseDate(req.purchaseDate());
         item.setOpenedDate(req.openedDate());
         item.setExpiryDate(req.expiryDate());
@@ -62,11 +68,46 @@ public class BeautyService {
     }
 
     @Transactional(readOnly = true)
-    public List<BeautyItemResponse> list(UUID userId, BeautyCategory category) {
-        List<BeautyItem> items = (category == null)
-                ? repository.findByUserIdOrderByCreatedAtDesc(userId)
-                : repository.findByUserIdAndCategoryOrderByCreatedAtDesc(userId, category);
+    public List<BeautyItemResponse> list(UUID userId, BeautyCategory category, Boolean favoritesOnly) {
+        boolean onlyFavorites = Boolean.TRUE.equals(favoritesOnly);
+        List<BeautyItem> items;
+        if (category == null) {
+            items = onlyFavorites
+                    ? repository.findByUserIdAndFavoriteTrueOrderByCreatedAtDesc(userId)
+                    : repository.findByUserIdOrderByCreatedAtDesc(userId);
+        } else {
+            items = onlyFavorites
+                    ? repository.findByUserIdAndCategoryAndFavoriteTrueOrderByCreatedAtDesc(userId, category)
+                    : repository.findByUserIdAndCategoryOrderByCreatedAtDesc(userId, category);
+        }
         return items.stream().map(this::toResponse).toList();
+    }
+
+    /** Favourite / un-favourite in one tap, mirroring the wardrobe. */
+    @Transactional
+    public BeautyItemResponse toggleFavorite(UUID userId, UUID id) {
+        BeautyItem item = require(userId, id);
+        item.setFavorite(!item.isFavorite());
+        return toResponse(repository.save(item));
+    }
+
+    @Transactional
+    public BeautyItemResponse update(UUID userId, UUID id, UpdateBeautyItemRequest req) {
+        BeautyItem item = require(userId, id);
+        if (req.brand() != null) item.setBrand(trimToNull(req.brand()));
+        if (req.productName() != null && !req.productName().isBlank()) item.setProductName(req.productName().trim());
+        if (req.category() != null) item.setCategory(req.category());
+        if (req.size() != null) item.setSize(trimToNull(req.size()));
+        if (req.ingredients() != null) item.setIngredients(cleanIngredients(req.ingredients()));
+        if (req.favorite() != null) item.setFavorite(req.favorite());
+        return toResponse(repository.save(item));
+    }
+
+    /** OCR a photo of an ingredient list into cleaned ingredient names (best-effort; empty on failure). */
+    public List<String> scanIngredients(MultipartFile file) {
+        byte[] bytes = readBytes(file);
+        List<String> raw = aiService.extractIngredients(bytes, file.getOriginalFilename(), file.getContentType());
+        return cleanIngredients(raw);
     }
 
     @Transactional(readOnly = true)
@@ -81,34 +122,61 @@ public class BeautyService {
 
     /** FR-06: explain an ingredient in plain language (via the AI seam). */
     public IngredientExplanation explainIngredient(String name) {
-        if (name == null || name.isBlank()) {
-            throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
-                    ai.closette.common.exception.ErrorCode.VALIDATION, "Ingredient name is required");
+        String cleaned = name == null ? "" : name.trim();
+        // Guard against junk tokens (a stray ".", a number) reaching the model, which otherwise
+        // replies with conversational filler ("sure, give me an ingredient") shown to the user.
+        if (cleaned.length() < 2 || !cleaned.matches(".*\\p{L}{2,}.*")) {
+            throw ApiException.validation(MessageKeys.INGREDIENT_REQUIRED);
         }
-        return aiService.explainIngredient(name.trim());
+        return aiService.explainIngredient(cleaned);
     }
 
     private BeautyItem require(UUID userId, UUID id) {
         return repository.findByIdAndUserId(id, userId)
-                .orElseThrow(() -> ApiException.notFound("Beauty item not found"));
+                .orElseThrow(() -> ApiException.notFound(MessageKeys.BEAUTY_NOT_FOUND));
     }
 
     private BeautyItemResponse toResponse(BeautyItem item) {
-        return BeautyItemResponse.from(item, storage.presignedUrl(storage.beautyBucket(), item.getImageKey()));
+        // Uploaded photos live in MinIO (presigned); search-sourced products keep an external URL.
+        String displayUrl = item.getImageKey() != null
+                ? storage.presignedUrl(storage.beautyBucket(), item.getImageKey())
+                : item.getImageUrl();
+        return BeautyItemResponse.from(item, displayUrl);
     }
 
     private static String trimToNull(String s) {
         return (s == null || s.isBlank()) ? null : s.trim();
     }
 
+    private static final Set<String> INGREDIENT_NOISE = Set.of(
+            "and", "or", "with", "may", "contain", "may contain", "other", "ingredients", "ingredient",
+            "n/a", "na", "none", "ci", "and/or", "plus", "minus");
+
+    /** Drop connector words and stray punctuation so ingredient chips are real ingredients, not "." or "and". */
+    private static List<String> cleanIngredients(List<String> raw) {
+        List<String> out = new ArrayList<>();
+        for (String r : raw) {
+            if (r == null) continue;
+            String t = r.strip()
+                    .replaceAll("^[\\s.;:()\\[\\]/*+_\\-]+", "")
+                    .replaceAll("[\\s.;:()\\[\\]/*+_\\-]+$", "")
+                    .strip();
+            if (t.isBlank() || t.length() >= 60) continue;
+            if (!t.matches(".*\\p{L}{2,}.*")) continue;
+            if (INGREDIENT_NOISE.contains(t.toLowerCase(Locale.ROOT))) continue;
+            if (!out.contains(t)) out.add(t);
+        }
+        return out;
+    }
+
     private static byte[] readBytes(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, "An image is required");
+            throw ApiException.validation(MessageKeys.IMAGE_REQUIRED);
         }
         try {
             return file.getBytes();
         } catch (IOException e) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, "Could not read the image");
+            throw ApiException.validation(MessageKeys.IMAGE_UNREADABLE);
         }
     }
 }

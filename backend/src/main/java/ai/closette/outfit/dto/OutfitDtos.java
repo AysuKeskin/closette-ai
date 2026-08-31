@@ -34,6 +34,7 @@ public final class OutfitDtos {
     public record SaveOutfitRequest(
             String title,
             String occasion,
+            String rationale,
             @NotNull List<UUID> itemIds,
             OutfitStatus status
     ) {
@@ -43,14 +44,15 @@ public final class OutfitDtos {
             UUID id,
             String title,
             String occasion,
+            String rationale,
             OutfitStatus status,
             boolean favorite,
             List<WardrobeItemResponse> items,
             Instant createdAt
     ) {
         public static OutfitResponse from(Outfit o, List<WardrobeItemResponse> items) {
-            return new OutfitResponse(o.getId(), o.getTitle(), o.getOccasion(), o.getStatus(),
-                    o.isFavorite(), items, o.getCreatedAt());
+            return new OutfitResponse(o.getId(), o.getTitle(), o.getOccasion(), o.getRationale(),
+                    o.getStatus(), o.isFavorite(), items, o.getCreatedAt());
         }
     }
 

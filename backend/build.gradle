@@ -44,6 +44,10 @@ dependencies {
     // API docs
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 
+    // Loads a local .env (git-ignored) into the Spring Environment — keeps secrets
+    // (e.g. RESEND_API_KEY) out of the repo, like the AI service's .env.
+    implementation 'me.paulschwarz:spring-dotenv:4.0.0'
+
     // Dev
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'

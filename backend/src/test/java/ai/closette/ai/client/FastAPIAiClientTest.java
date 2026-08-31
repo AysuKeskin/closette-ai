@@ -5,6 +5,7 @@ import ai.closette.ai.dto.ClothingAnalysis;
 import ai.closette.ai.dto.IngredientExplanation;
 import ai.closette.common.exception.ApiException;
 import ai.closette.common.exception.ErrorCode;
+import ai.closette.common.exception.MessageKeys;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -102,7 +103,7 @@ class FastAPIAiClientTest {
                 .isInstanceOfSatisfying(ApiException.class, ex -> {
                     assertThat(ex.getCode()).isEqualTo(ErrorCode.AI_UNAVAILABLE);
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-                    assertThat(ex.getMessage()).contains("manually");
+                    assertThat(ex.getMessageKey()).isEqualTo(MessageKeys.AI_UNAVAILABLE_ADD_MANUALLY);
                 });
     }
 

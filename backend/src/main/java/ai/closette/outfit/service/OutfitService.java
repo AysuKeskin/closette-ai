@@ -4,6 +4,9 @@ import ai.closette.ai.dto.OutfitCandidate;
 import ai.closette.ai.dto.OutfitSuggestion;
 import ai.closette.ai.service.AIService;
 import ai.closette.common.exception.ApiException;
+import ai.closette.common.exception.MessageKeys;
+import ai.closette.common.i18n.Messages;
+import ai.closette.common.exception.MessageKeys;
 import ai.closette.outfit.dto.OutfitDtos.FeedbackRequest;
 import ai.closette.outfit.dto.OutfitDtos.GeneratedLook;
 import ai.closette.outfit.dto.OutfitDtos.GetReadyRequest;
@@ -16,6 +19,7 @@ import ai.closette.outfit.model.OutfitStatus;
 import ai.closette.outfit.repository.OutfitFeedbackRepository;
 import ai.closette.outfit.repository.OutfitRepository;
 import ai.closette.storage.service.StorageService;
+import ai.closette.user.repository.StylePreferenceRepository;
 import ai.closette.wardrobe.model.ClothingCategory;
 import ai.closette.wardrobe.model.WardrobeItem;
 import ai.closette.wardrobe.repository.WardrobeItemRepository;
@@ -43,17 +47,23 @@ public class OutfitService {
     private final WardrobeItemRepository wardrobeRepository;
     private final StorageService storage;
     private final AIService aiService;
+    private final StylePreferenceRepository stylePreferences;
+    private final Messages messages;
 
     public OutfitService(OutfitRepository outfitRepository,
                          OutfitFeedbackRepository feedbackRepository,
                          WardrobeItemRepository wardrobeRepository,
                          StorageService storage,
-                         AIService aiService) {
+                         AIService aiService,
+                         StylePreferenceRepository stylePreferences,
+                         Messages messages) {
         this.outfitRepository = outfitRepository;
         this.feedbackRepository = feedbackRepository;
         this.wardrobeRepository = wardrobeRepository;
         this.storage = storage;
         this.aiService = aiService;
+        this.stylePreferences = stylePreferences;
+        this.messages = messages;
     }
 
     /** FR-07/08 — compose a complete look from the user's own items (RAG: retrieve
@@ -62,8 +72,9 @@ public class OutfitService {
     public GeneratedLook generate(UUID userId, GetReadyRequest request) {
         List<WardrobeItem> all = wardrobeRepository.findByUserIdOrderByCreatedAtDesc(userId);
         if (all.isEmpty()) {
-            return new GeneratedLook("Your first look",
-                    "Add a few pieces to your wardrobe and I'll put a complete look together for you.",
+            return new GeneratedLook(
+                    messages.get(MessageKeys.OUTFIT_FIRST_LOOK_TITLE),
+                    messages.get(MessageKeys.OUTFIT_FIRST_LOOK_RATIONALE),
                     List.of());
         }
 
@@ -71,28 +82,41 @@ public class OutfitService {
 
         // Retrieve up to 40 owned items as the LLM's context, then let it compose.
         List<WardrobeItem> candidates = all.size() > 40 ? all.subList(0, 40) : all;
-        OutfitSuggestion ai = aiService.generateOutfit(occasion, toCandidates(candidates), List.of());
-        if (ai != null && ai.itemIds() != null && !ai.itemIds().isEmpty()) {
+        OutfitSuggestion ai = aiService.generateOutfit(occasion, toCandidates(candidates), preferencesFor(userId));
+        if (ai != null) {
+            boolean pickedSomething = ai.itemIds() != null && !ai.itemIds().isEmpty();
             Map<String, WardrobeItem> byId = new LinkedHashMap<>();
             for (WardrobeItem i : all) {
                 byId.put(i.getId().toString(), i);
             }
             List<WardrobeItem> look = new ArrayList<>();
-            for (String id : ai.itemIds()) {
-                WardrobeItem it = byId.get(id);
-                if (it != null && !look.contains(it)) {
-                    look.add(it);
+            if (ai.itemIds() != null) {
+                for (String id : ai.itemIds()) {
+                    WardrobeItem it = byId.get(id);
+                    if (it != null && !look.contains(it)) {
+                        look.add(it);
+                    }
                 }
             }
             if (!look.isEmpty()) {
-                String title = notBlank(ai.title()) ? ai.title().trim() : "Your look";
+                String title = notBlank(ai.title()) ? ai.title().trim()
+                        : messages.get(MessageKeys.OUTFIT_DEFAULT_TITLE);
                 String rationale = notBlank(ai.rationale()) ? ai.rationale().trim()
-                        : "A complete look for " + occasion + ".";
+                        : messages.get(MessageKeys.OUTFIT_AI_FALLBACK_RATIONALE, occasion);
                 return new GeneratedLook(title, rationale, look.stream().map(this::toResponse).toList());
             }
+            // The AI deliberately picked nothing (unclear/gibberish occasion): don't fabricate a look.
+            if (!pickedSomething) {
+                String rationale = notBlank(ai.rationale()) ? ai.rationale().trim()
+                        : messages.get(MessageKeys.OUTFIT_UNCLEAR_OCCASION);
+                String title = notBlank(ai.title()) ? ai.title().trim()
+                        : messages.get(MessageKeys.OUTFIT_RETRY_TITLE);
+                return new GeneratedLook(title, rationale, List.of());
+            }
+            // It picked items but none resolved (hallucinated ids): fall through to the rule-based composer.
         }
 
-        // Fallback: deterministic rule-based composer (AI unavailable / empty result).
+        // AI unavailable, or it returned only unusable ids: best-effort deterministic composer.
         return ruleBasedLook(all, occasion);
     }
 
@@ -114,16 +138,31 @@ public class OutfitService {
         first(byCategory, ClothingCategory.BAGS).ifPresent(look::add);
         first(byCategory, ClothingCategory.JEWELRY).ifPresent(look::add);
         first(byCategory, ClothingCategory.ACCESSORIES).ifPresent(look::add);
-        String rationale = "A complete look for " + occasion
-                + " built from " + look.size() + " pieces you already own.";
-        return new GeneratedLook("Look 1", rationale, look.stream().map(this::toResponse).toList());
+        String rationale = messages.get(MessageKeys.OUTFIT_RULE_BASED_RATIONALE, occasion, look.size());
+        return new GeneratedLook(messages.get(MessageKeys.OUTFIT_RULE_BASED_TITLE), rationale,
+                look.stream().map(this::toResponse).toList());
     }
 
-    private static String occasionOf(GetReadyRequest request) {
-        if (request == null) return "your day";
+    /** The user's style words + favourite colours, fed to the stylist as soft guidance. */
+    private List<String> preferencesFor(UUID userId) {
+        return stylePreferences.findByUserId(userId)
+                .map(p -> {
+                    List<String> out = new ArrayList<>();
+                    if (p.getPreferredStyles() != null) out.addAll(p.getPreferredStyles());
+                    if (p.getFavoriteColors() != null) out.addAll(p.getFavoriteColors());
+                    if (p.getColorSeason() != null && !p.getColorSeason().isBlank()) {
+                        out.add(messages.get(MessageKeys.OUTFIT_COLOR_SEASON_HINT, p.getColorSeason()));
+                    }
+                    return out;
+                })
+                .orElseGet(List::of);
+    }
+
+    private String occasionOf(GetReadyRequest request) {
+        if (request == null) return messages.get(MessageKeys.OUTFIT_DEFAULT_OCCASION);
         if (notBlank(request.occasion())) return request.occasion().trim();
         if (notBlank(request.prompt())) return request.prompt().trim();
-        return "your day";
+        return messages.get(MessageKeys.OUTFIT_DEFAULT_OCCASION);
     }
 
     private static List<OutfitCandidate> toCandidates(List<WardrobeItem> items) {
@@ -148,6 +187,7 @@ public class OutfitService {
         Outfit outfit = new Outfit(userId);
         outfit.setTitle(request.title());
         outfit.setOccasion(request.occasion());
+        outfit.setRationale(request.rationale());
         outfit.setItemIds(request.itemIds().stream().map(UUID::toString).toList());
         outfit.setStatus(request.status() != null ? request.status() : OutfitStatus.SAVED);
         return toResponse(outfitRepository.save(outfit));
@@ -196,7 +236,7 @@ public class OutfitService {
 
     private Outfit require(UUID userId, UUID id) {
         return outfitRepository.findByIdAndUserId(id, userId)
-                .orElseThrow(() -> ApiException.notFound("Outfit not found"));
+                .orElseThrow(() -> ApiException.notFound(MessageKeys.OUTFIT_NOT_FOUND));
     }
 
     private Optional<WardrobeItem> first(Map<ClothingCategory, List<WardrobeItem>> byCategory, ClothingCategory c) {

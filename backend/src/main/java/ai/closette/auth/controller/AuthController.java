@@ -8,6 +8,8 @@ import ai.closette.auth.dto.RegisterRequest;
 import ai.closette.auth.dto.ResetPasswordRequest;
 import ai.closette.auth.service.AuthService;
 import ai.closette.common.api.ApiResponse;
+import ai.closette.common.ratelimit.RateLimit;
+import ai.closette.common.ratelimit.RateLimitBucket;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,10 +26,14 @@ public class AuthController {
         this.authService = authService;
     }
 
+    @RateLimit(bucket = RateLimitBucket.REGISTER, cost = 1)
+
     @PostMapping("/register")
     public ApiResponse<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ApiResponse.ok(authService.register(request));
     }
+
+    @RateLimit(bucket = RateLimitBucket.LOGIN, cost = 1)
 
     @PostMapping("/login")
     public ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -40,6 +46,7 @@ public class AuthController {
     }
 
     /** Start a password reset — emails a code if the account exists. */
+    @RateLimit(bucket = RateLimitBucket.PASSWORD_RESET, cost = 1)
     @PostMapping("/forgot-password")
     public ApiResponse<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         authService.forgotPassword(request);
@@ -47,6 +54,7 @@ public class AuthController {
     }
 
     /** Complete a password reset with the emailed code and a new password. */
+    @RateLimit(bucket = RateLimitBucket.PASSWORD_RESET, cost = 1)
     @PostMapping("/reset-password")
     public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);

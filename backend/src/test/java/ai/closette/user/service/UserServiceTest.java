@@ -85,11 +85,15 @@ class UserServiceTest {
         UUID userId = newUser();
 
         userService.updatePreferences(userId, new UpdateStylePreferenceRequest(
-                List.of("dusty pink", "navy"), List.of("minimal", "classic"), true));
+                List.of("dusty pink", "navy"), List.of("minimal", "classic"), "Autumn",
+                List.of("coquette", "boho"), "A pretty dress", true));
 
         StylePreferenceResponse stored = userService.getPreferences(userId);
         assertThat(stored.favoriteColors()).containsExactly("dusty pink", "navy");
         assertThat(stored.preferredStyles()).containsExactly("minimal", "classic");
+        assertThat(stored.colorSeason()).isEqualTo("Autumn");
+        assertThat(stored.lovedAesthetics()).containsExactly("coquette", "boho");
+        assertThat(stored.dressUp()).isEqualTo("A pretty dress");
         assertThat(stored.onboardingCompleted()).isTrue();
     }
 
@@ -97,13 +101,16 @@ class UserServiceTest {
     void updatingPreferencesOnlyTouchesTheFieldsThatWereSent() {
         UUID userId = newUser();
         userService.updatePreferences(userId, new UpdateStylePreferenceRequest(
-                List.of("navy"), List.of("minimal"), true));
+                List.of("navy"), List.of("minimal"), "Winter", List.of("edgy"), "Tailored pieces", true));
 
         StylePreferenceResponse updated = userService.updatePreferences(userId,
-                new UpdateStylePreferenceRequest(List.of("black"), null, null));
+                new UpdateStylePreferenceRequest(List.of("black"), null, null, null, null, null));
 
         assertThat(updated.favoriteColors()).containsExactly("black");
         assertThat(updated.preferredStyles()).containsExactly("minimal");
+        assertThat(updated.colorSeason()).isEqualTo("Winter");
+        assertThat(updated.lovedAesthetics()).containsExactly("edgy");
+        assertThat(updated.dressUp()).isEqualTo("Tailored pieces");
         assertThat(updated.onboardingCompleted()).isTrue();
     }
 
@@ -112,9 +119,21 @@ class UserServiceTest {
         UUID owner = newUser();
         UUID stranger = newUser();
         userService.updatePreferences(owner, new UpdateStylePreferenceRequest(
-                List.of("navy"), List.of("minimal"), true));
+                List.of("navy"), List.of("minimal"), "Winter", List.of("edgy"), "Tailored pieces", true));
 
         assertThat(userService.getPreferences(stranger).favoriteColors()).isEmpty();
+    }
+
+    @Test
+    void deletingAnAccountRemovesTheUser() {
+        UUID userId = newUser();
+        userService.getPreferences(userId); // create a style_preferences row too
+
+        userService.deleteAccount(userId);
+
+        assertThatThrownBy(() -> userService.getProfile(userId))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND));
     }
 
     @Test

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Token issuing/parsing in isolation — no Spring context. These are the checks
@@ -68,6 +69,22 @@ class JwtServiceTest {
 
         assertThat(expiring.parseAccessToken(expiring.generateAccessToken(userId))).isNull();
         assertThat(expiring.parseRefreshToken(expiring.generateRefreshToken(userId))).isNull();
+    }
+
+    @Test
+    void theShippedPlaceholderSecretIsRefused() {
+        // The default in application.yml is public. Booting with it would accept
+        // tokens minted by anyone who has read the repository.
+        assertThatThrownBy(() -> jwtService("change-me-to-a-long-random-secret-at-least-256-bits-long-000000", 60, 30))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("placeholder");
+    }
+
+    @Test
+    void aSecretTooShortForHs256IsRefused() {
+        assertThatThrownBy(() -> jwtService("short", 60, 30))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("too short");
     }
 
     @Test

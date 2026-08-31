@@ -19,7 +19,14 @@ public interface AIService {
 
     ClothingAnalysis analyzeClothing(byte[] image, String filename, String contentType);
 
+    /** Parse a free-text garment description into structured attributes (for Should-I-Buy's
+     * natural-language input, so users never fill a category/colour/style form). Null on failure. */
+    ClothingAnalysis parseClothingText(String description);
+
     BeautyAnalysis analyzeBeautyPhoto(byte[] image, String filename, String contentType);
+
+    /** OCR a photo of a product's ingredient list into raw ingredient names. Empty list on failure. */
+    List<String> extractIngredients(byte[] image, String filename, String contentType);
 
     IngredientExplanation explainIngredient(String name);
 

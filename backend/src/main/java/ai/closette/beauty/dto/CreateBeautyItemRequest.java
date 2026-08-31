@@ -10,13 +10,14 @@ import java.util.List;
 public record CreateBeautyItemRequest(
         String brand,
 
-        @NotBlank(message = "Product name is required")
+        @NotBlank(message = "{validation.productName.required}")
         String productName,
 
-        @NotNull(message = "Category is required")
+        @NotNull(message = "{validation.category.required}")
         BeautyCategory category,
 
         String imageKey,
+        String imageUrl,
         String size,
         List<String> ingredients,
         LocalDate purchaseDate,

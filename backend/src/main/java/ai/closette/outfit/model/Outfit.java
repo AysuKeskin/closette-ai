@@ -29,6 +29,10 @@ public class Outfit extends BaseEntity {
     @Column(name = "occasion")
     private String occasion;
 
+    // The AI styling explanation shown when the look was generated (NFR-07); kept for the detail view.
+    @Column(name = "rationale", length = 2000)
+    private String rationale;
+
     @Convert(converter = StringListConverter.class)
     @Column(name = "item_ids", length = 2000)
     private List<String> itemIds = new ArrayList<>();
@@ -57,6 +61,14 @@ public class Outfit extends BaseEntity {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getRationale() {
+        return rationale;
+    }
+
+    public void setRationale(String rationale) {
+        this.rationale = rationale;
     }
 
     public String getOccasion() {

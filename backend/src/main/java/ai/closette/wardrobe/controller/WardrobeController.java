@@ -1,6 +1,7 @@
 package ai.closette.wardrobe.controller;
 
 import ai.closette.common.api.ApiResponse;
+import ai.closette.common.ratelimit.RateLimit;
 import ai.closette.common.security.SecurityUtil;
 import ai.closette.wardrobe.dto.AnalyzeResponse;
 import ai.closette.wardrobe.dto.CreateItemRequest;
@@ -37,6 +38,7 @@ public class WardrobeController {
     }
 
     /** Flow A step 1 — upload a photo, get an editable AI analysis back. */
+    @RateLimit(cost = 10)
     @PostMapping(value = "/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<AnalyzeResponse> analyze(@RequestParam("file") MultipartFile file) {
         return ApiResponse.ok(service.analyze(SecurityUtil.currentUserId(), file));

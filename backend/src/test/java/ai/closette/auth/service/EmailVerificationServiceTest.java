@@ -2,6 +2,7 @@ package ai.closette.auth.service;
 
 import ai.closette.common.exception.ApiException;
 import ai.closette.common.exception.ErrorCode;
+import ai.closette.common.exception.MessageKeys;
 import ai.closette.support.TestData;
 import ai.closette.user.dto.UserResponse;
 import ai.closette.user.model.User;
@@ -37,6 +38,11 @@ class EmailVerificationServiceTest {
 
     private User reload(UUID userId) {
         return userRepository.findById(userId).orElseThrow();
+    }
+
+    /** A six-digit code that is definitely not the one on the user. */
+    private String wrongCodeFor(UUID userId) {
+        return reload(userId).getVerificationCode().equals("000000") ? "111111" : "000000";
     }
 
     @Test
@@ -87,9 +93,71 @@ class EmailVerificationServiceTest {
         assertThatThrownBy(() -> verificationService.verify(userId, wrongCode))
                 .isInstanceOfSatisfying(ApiException.class, ex -> {
                     assertThat(ex.getCode()).isEqualTo(ErrorCode.VALIDATION);
-                    assertThat(ex.getMessage()).startsWith("code:");
+                    assertThat(ex.getMessageKey()).isEqualTo(MessageKeys.AUTH_CODE_INCORRECT);
                 });
         assertThat(reload(userId).isEmailVerified()).isFalse();
+    }
+
+    @Test
+    void theCodeIsBurnedAfterFiveWrongAttempts() {
+        // Six digits over fifteen minutes is guessable if guessing is free.
+        UUID userId = newUser();
+        String wrongCode = wrongCodeFor(userId);
+
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            assertThatThrownBy(() -> verificationService.verify(userId, wrongCode))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKeys.AUTH_CODE_INCORRECT));
+        }
+
+        assertThatThrownBy(() -> verificationService.verify(userId, wrongCode))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKeys.AUTH_TOO_MANY_ATTEMPTS));
+        assertThat(reload(userId).getVerificationCode()).isNull();
+    }
+
+    @Test
+    void theRightCodeStopsWorkingOnceItIsBurned() {
+        UUID userId = newUser();
+        String realCode = reload(userId).getVerificationCode();
+        String wrongCode = wrongCodeFor(userId);
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            assertThatThrownBy(() -> verificationService.verify(userId, wrongCode)).isInstanceOf(ApiException.class);
+        }
+
+        // Burning the code is the whole point: the attacker's remaining guesses
+        // are now worthless, and the owner asks for a new one.
+        assertThatThrownBy(() -> verificationService.verify(userId, realCode))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo(MessageKeys.AUTH_CODE_EXPIRED));
+        assertThat(reload(userId).isEmailVerified()).isFalse();
+    }
+
+    @Test
+    void aFreshCodeRestoresTheAttemptBudget() {
+        UUID userId = newUser();
+        String wrongCode = wrongCodeFor(userId);
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            assertThatThrownBy(() -> verificationService.verify(userId, wrongCode)).isInstanceOf(ApiException.class);
+        }
+        User user = reload(userId);
+        user.setVerificationSentAt(Instant.now().minusSeconds(120));
+        userRepository.save(user);
+
+        verificationService.resend(userId);
+
+        assertThat(reload(userId).getVerificationAttempts()).isZero();
+    }
+
+    @Test
+    void aCorrectCodeClearsTheAttemptCount() {
+        UUID userId = newUser();
+        String wrongCode = wrongCodeFor(userId);
+        assertThatThrownBy(() -> verificationService.verify(userId, wrongCode)).isInstanceOf(ApiException.class);
+
+        verificationService.verify(userId, reload(userId).getVerificationCode());
+
+        assertThat(reload(userId).getVerificationAttempts()).isZero();
     }
 
     @Test
@@ -100,7 +168,7 @@ class EmailVerificationServiceTest {
         userRepository.save(user);
 
         assertThatThrownBy(() -> verificationService.verify(userId, user.getVerificationCode()))
-                .hasMessageContaining("expired");
+                .hasMessage(MessageKeys.AUTH_CODE_EXPIRED);
     }
 
     @Test

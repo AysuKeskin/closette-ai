@@ -14,7 +14,7 @@ public final class RecommendationDtos {
     public record PreferenceEntry(String attribute, double weight) {
     }
 
-    /** FR-10 request — either typed in, or prefilled from a photo analysis. */
+    /** FR-10 request — structured attributes (derived from a description or photo, not a user form). */
     public record ShouldIBuyRequest(
             ClothingCategory category,
             List<String> colors,
@@ -22,14 +22,30 @@ public final class RecommendationDtos {
     ) {
     }
 
-    /** FR-10 explainable result (NFR-07): a score plus the reasons behind it. */
+    /** FR-10 natural-language request: the user describes the item in words. */
+    public record DescribeItemRequest(
+            String description
+    ) {
+    }
+
+    /**
+     * FR-10 explainable result (NFR-07): a score plus the reasons behind it. The
+     * {@code detected*} fields echo what we understood from the words/photo, so the UI
+     * can show "Got it — a beige blazer" and the user can trust (or redo) the read.
+     */
     public record ShouldIBuyResponse(
             int matchScore,
             String verdict,          // buy | maybe | skip (LLM, RAG-grounded)
             int matchingItemCount,
             int similarItemCount,
             List<WardrobeItemResponse> similarItems,
-            String explanation
+            String explanation,
+            String detectedLabel,
+            List<String> detectedColors,
+            List<String> detectedStyles,
+            // false when the AI couldn't tell what the item is — the UI shows a "couldn't read that"
+            // state instead of a fabricated verdict/score.
+            boolean understood
     ) {
     }
 }

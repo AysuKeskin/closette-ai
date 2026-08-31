@@ -10,6 +10,7 @@ import ai.closette.user.dto.UpdateStylePreferenceRequest;
 import ai.closette.user.dto.UserResponse;
 import ai.closette.user.service.UserService;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -37,6 +38,13 @@ public class UserController {
     @PutMapping("/me")
     public ApiResponse<UserResponse> updateMe(@Valid @RequestBody UpdateProfileRequest request) {
         return ApiResponse.ok(userService.updateProfile(SecurityUtil.currentUserId(), request));
+    }
+
+    /** Permanently delete the account and all of its data. */
+    @DeleteMapping("/me")
+    public ApiResponse<Void> deleteMe() {
+        userService.deleteAccount(SecurityUtil.currentUserId());
+        return ApiResponse.ok(null);
     }
 
     /** Soft email verification — submit the emailed 6-digit code. */

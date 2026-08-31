@@ -27,10 +27,36 @@ public class JwtService {
     private final Duration accessTtl;
     private final Duration refreshTtl;
 
+    /** The placeholder shipped in application.yml and .env.example. */
+    private static final String PLACEHOLDER_SECRET = "change-me";
+    private static final int MIN_SECRET_BYTES = 32;
+
     public JwtService(ClosetteProperties props) {
-        this.key = Keys.hmacShaKeyFor(props.getJwt().getSecret().getBytes(StandardCharsets.UTF_8));
+        String secret = props.getJwt().getSecret();
+        requireRealSecret(secret);
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTtl = Duration.ofMinutes(props.getJwt().getAccessTtlMinutes());
         this.refreshTtl = Duration.ofDays(props.getJwt().getRefreshTtlDays());
+    }
+
+    /**
+     * Refuses to start on the shipped placeholder.
+     *
+     * The default in application.yml exists so the app runs locally, but it is
+     * public: anything deployed with it would accept tokens minted by anyone who
+     * has read the repository. Failing at startup is the only way that mistake
+     * gets noticed.
+     */
+    private static void requireRealSecret(String secret) {
+        if (secret == null || secret.isBlank() || secret.startsWith(PLACEHOLDER_SECRET)) {
+            throw new IllegalStateException(
+                    "JWT_SECRET is still the placeholder from application.yml. Set a real one "
+                            + "(at least " + MIN_SECRET_BYTES + " random bytes) before starting.");
+        }
+        if (secret.getBytes(StandardCharsets.UTF_8).length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "JWT_SECRET is too short for HS256: needs at least " + MIN_SECRET_BYTES + " bytes.");
+        }
     }
 
     public String generateAccessToken(UUID userId) {

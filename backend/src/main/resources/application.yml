@@ -35,6 +35,16 @@ closette:
     refresh-ttl-days: ${JWT_REFRESH_TTL_DAYS:30}
   ai:
     base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
+  beauty:
+    # Optional RapidAPI source (e.g. Sephora). Left blank = skipped; the free
+    # Makeup API + Open Beauty Facts sources always run.
+    rapidapi-key: ${RAPIDAPI_KEY:}
+    rapidapi-host: ${RAPIDAPI_HOST:sephora.p.rapidapi.com}
+  email:
+    # log (dev, codes to the console) | resend (real email, free tier)
+    provider: ${EMAIL_PROVIDER:log}
+    resend-api-key: ${RESEND_API_KEY:}
+    from: ${EMAIL_FROM:Closette <onboarding@resend.dev>}
     timeout-ms: 20000
   storage:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
@@ -44,7 +54,18 @@ closette:
     bucket-beauty: ${MINIO_BUCKET_BEAUTY:beauty}
     signed-url-ttl-minutes: 60
   ratelimit:
-    ai-requests-per-minute: 20
+    # Start in LOG: overruns are recorded but nothing is rejected, so the numbers
+    # can be checked against real traffic before they start refusing requests.
+    mode: log
+    user:            { per-minute: 50,  per-day: 288, per-week: 900 }
+    unverified-user: { per-minute: 20,  per-day: 30,  per-week: 60 }
+    ip:              { per-minute: 120, per-day: 900, per-week: 2500 }
+    verify-code:     { per-minute: 5,   per-day: 20,  per-week: 40 }
+    register-ip:     { per-minute: 3,   per-day: 10,  per-week: 25 }
+    login-ip:        { per-minute: 10,  per-day: 200, per-week: 600 }
+    login-email:     { per-minute: 5,   per-day: 50,  per-week: 150 }
+    password-reset-ip:    { per-minute: 3, per-day: 15, per-week: 40 }
+    password-reset-email: { per-minute: 1, per-day: 5,  per-week: 15 }
 
 springdoc:
   swagger-ui:

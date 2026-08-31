@@ -1,6 +1,7 @@
 package ai.closette.common.security;
 
 import ai.closette.common.exception.ApiException;
+import ai.closette.common.exception.MessageKeys;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -18,7 +19,7 @@ public final class SecurityUtil {
     public static UUID currentUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getPrincipal() == null || !(auth.getPrincipal() instanceof UUID id)) {
-            throw ApiException.unauthorized("Authentication required");
+            throw ApiException.unauthorized(MessageKeys.AUTH_REQUIRED);
         }
         return id;
     }

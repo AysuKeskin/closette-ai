@@ -35,6 +35,10 @@ public class User extends BaseEntity {
     @Column(name = "verification_sent_at")
     private Instant verificationSentAt;
 
+    /** Wrong codes entered against the current verification code. */
+    @Column(name = "verification_attempts", nullable = false)
+    private int verificationAttempts = 0;
+
     @Column(name = "reset_code", length = 10)
     private String resetCode;
 
@@ -116,6 +120,14 @@ public class User extends BaseEntity {
 
     public void setVerificationSentAt(Instant verificationSentAt) {
         this.verificationSentAt = verificationSentAt;
+    }
+
+    public int getVerificationAttempts() {
+        return verificationAttempts;
+    }
+
+    public void setVerificationAttempts(int verificationAttempts) {
+        this.verificationAttempts = verificationAttempts;
     }
 
     public String getResetCode() {

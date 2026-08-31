@@ -14,5 +14,9 @@ public interface BeautyItemRepository extends JpaRepository<BeautyItem, UUID> {
 
     List<BeautyItem> findByUserIdAndCategoryOrderByCreatedAtDesc(UUID userId, BeautyCategory category);
 
+    List<BeautyItem> findByUserIdAndFavoriteTrueOrderByCreatedAtDesc(UUID userId);
+
+    List<BeautyItem> findByUserIdAndCategoryAndFavoriteTrueOrderByCreatedAtDesc(UUID userId, BeautyCategory category);
+
     Optional<BeautyItem> findByIdAndUserId(UUID id, UUID userId);
 }

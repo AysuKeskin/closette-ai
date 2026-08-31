@@ -5,17 +5,17 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 public record ResetPasswordRequest(
-        @NotBlank @Email(message = "A valid email is required")
+        @NotBlank @Email(message = "{validation.email.invalid}")
         String email,
 
-        @NotBlank(message = "Enter the 6-digit code")
-        @Pattern(regexp = "^\\d{6}$", message = "The code is 6 digits")
+        @NotBlank(message = "{validation.code.required}")
+        @Pattern(regexp = "^\\d{6}$", message = "{validation.code.sixDigits}")
         String code,
 
-        @NotBlank(message = "Password must not be blank")
+        @NotBlank(message = "{validation.password.blank}")
         @Pattern(
                 regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,100}$",
-                message = "Password must be 8+ characters with an uppercase, a lowercase, and a number")
+                message = "{validation.password.pattern}")
         String newPassword
 ) {
 }
