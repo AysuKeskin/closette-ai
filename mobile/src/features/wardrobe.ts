@@ -10,6 +10,11 @@ export function useWardrobe(query: WardrobeQuery = {}) {
   });
 }
 
+/** Favourites only — what the Favorites screen shows. */
+export function useFavoriteItems() {
+  return useWardrobe({ favorite: true });
+}
+
 export function useRecentItems(limit = 8) {
   return useQuery({
     queryKey: queryKeys.wardrobeRecent,

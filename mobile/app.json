@@ -13,7 +13,11 @@
       "image": "./assets/splash-icon.png"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Closette uses the camera so you can photograph a clothing item or beauty product and have it catalogued for your wardrobe.",
+        "NSPhotoLibraryUsageDescription": "Closette needs access to the photos you choose so it can catalogue that item for your wardrobe."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,16 +26,31 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Closette needs access to the photos you choose so it can catalogue that item for your wardrobe.",
+          "cameraPermission": "Closette uses the camera so you can photograph a clothing item or beauty product."
+        }
+      ]
     ],
     "extra": {
       "apiBaseUrl": "http://localhost:8080"
+    },
+    "locales": {
+      "en": "./locales/en.json",
+      "tr": "./locales/tr.json"
     }
   }
 }

@@ -7,6 +7,7 @@ import { toApiError } from '../../api/client';
 import { AppText, Button, Card, Chip, Header, Screen, TextField } from '../../components/ui';
 import { CLOTHING_CATEGORIES, ClothingCategory } from '../../api/types';
 import { useCreateItem } from '../../features/wardrobe';
+import { useT } from '../../i18n';
 import { colors, radius, spacing } from '../../theme';
 import type { WardrobeStackParamList } from '../../navigation/types';
 
@@ -38,6 +39,7 @@ function titleCase(value: string): string {
 }
 
 export function ConfirmItemScreen() {
+  const { t: text } = useT();
   const navigation = useNavigation<NativeStackNavigationProp<WardrobeStackParamList>>();
   const route = useRoute<RouteProp<WardrobeStackParamList, 'ConfirmItem'>>();
   const { analysis: response, imageUri } = route.params;
@@ -60,7 +62,7 @@ export function ConfirmItemScreen() {
   const onSave = () => {
     setError(null);
     if (!name.trim()) {
-      setError('Please give this item a name.');
+      setError(text('confirm.nameRequired'));
       return;
     }
     createItem.mutate(
@@ -86,9 +88,9 @@ export function ConfirmItemScreen() {
   return (
     <Screen
       scroll
-      footer={<Button label="Save to wardrobe" icon="♡" onPress={onSave} loading={createItem.isPending} />}
+      footer={<Button label={text('confirm.saveToWardrobe')} icon="♡" onPress={onSave} loading={createItem.isPending} />}
     >
-      <Header title="Confirm details" subtitle="Edit anything before saving" onBack={() => navigation.goBack()} />
+      <Header title={text('confirm.title')} subtitle={text('confirm.subtitle')} onBack={() => navigation.goBack()} />
 
       {imageUri ? (
         <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
@@ -105,7 +107,7 @@ export function ConfirmItemScreen() {
       {ai.color_details && ai.color_details.length > 0 ? (
         <View style={styles.colorsBlock}>
           <AppText variant="label" tone="secondary" style={styles.fieldLabel}>
-            Detected colours
+            {text('confirm.detectedColors')}
           </AppText>
           <View style={styles.swatches}>
             {ai.color_details.map((c) => (
@@ -119,11 +121,11 @@ export function ConfirmItemScreen() {
       ) : null}
 
       <View style={styles.form}>
-        <TextField label="Name" value={name} onChangeText={setName} placeholder="e.g. Black mini dress" />
+        <TextField label={text('confirm.name')} value={name} onChangeText={setName} placeholder={text('confirm.namePlaceholder')} />
 
         <View>
           <AppText variant="label" tone="secondary" style={styles.fieldLabel}>
-            Category
+            {text('common.category')}
           </AppText>
           <View style={styles.chips}>
             {CLOTHING_CATEGORIES.map((c) => (
@@ -132,13 +134,13 @@ export function ConfirmItemScreen() {
           </View>
         </View>
 
-        <TextField label="Subcategory" value={subcategory} onChangeText={setSubcategory} placeholder="e.g. mini dress" />
-        <TextField label="Colors" value={colors_} onChangeText={setColors} placeholder="black, cream" hint="Separate with commas" />
-        <TextField label="Pattern" value={pattern} onChangeText={setPattern} placeholder="solid" />
-        <TextField label="Styles" value={styles_} onChangeText={setStyles} placeholder="minimal, elegant" hint="Separate with commas" />
-        <TextField label="Seasons" value={seasons} onChangeText={setSeasons} placeholder="spring, summer" hint="Separate with commas" />
-        <TextField label="Brand (optional)" value={brand} onChangeText={setBrand} />
-        <TextField label="Size (optional)" value={size} onChangeText={setSize} error={error} />
+        <TextField label={text('confirm.subcategory')} value={subcategory} onChangeText={setSubcategory} placeholder={text('confirm.subcategoryPlaceholder')} />
+        <TextField label={text('confirm.colors')} value={colors_} onChangeText={setColors} placeholder={text('confirm.colorsPlaceholder')} hint={text('confirm.commaHint')} />
+        <TextField label={text('confirm.pattern')} value={pattern} onChangeText={setPattern} placeholder="solid" />
+        <TextField label={text('confirm.styles')} value={styles_} onChangeText={setStyles} placeholder={text('confirm.stylesPlaceholder')} hint={text('confirm.commaHint')} />
+        <TextField label={text('confirm.seasons')} value={seasons} onChangeText={setSeasons} placeholder={text('confirm.seasonsPlaceholder')} hint={text('confirm.commaHint')} />
+        <TextField label={text('confirm.brandOptional')} value={brand} onChangeText={setBrand} />
+        <TextField label={text('confirm.sizeOptional')} value={size} onChangeText={setSize} error={error} />
       </View>
     </Screen>
   );

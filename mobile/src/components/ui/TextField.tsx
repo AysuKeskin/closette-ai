@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 
+import { useT } from '../../i18n';
 import { colors, radius, spacing, typography } from '../../theme';
 import { AppText } from './AppText';
 
@@ -20,6 +21,7 @@ export function TextField({
   secureTextEntry,
   ...rest
 }: Props) {
+  const { t: text } = useT();
   const [focused, setFocused] = useState(false);
   // Password fields get a Show/Hide toggle; start hidden.
   const [hidden, setHidden] = useState(true);
@@ -58,11 +60,11 @@ export function TextField({
             onPress={() => setHidden((h) => !h)}
             hitSlop={spacing.sm}
             accessibilityRole="button"
-            accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+            accessibilityLabel={hidden ? text('common.showPassword') : text('common.hidePassword')}
             style={styles.toggle}
           >
             <AppText variant="label" tone="brand">
-              {hidden ? 'Show' : 'Hide'}
+              {hidden ? text('common.show') : text('common.hide')}
             </AppText>
           </Pressable>
         ) : null}

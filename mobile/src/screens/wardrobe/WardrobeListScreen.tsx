@@ -16,29 +16,43 @@ import {
 } from '../../components/ui';
 import { CLOTHING_CATEGORIES, ClothingCategory } from '../../api/types';
 import { useWardrobe } from '../../features/wardrobe';
+import { useT } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
 import { spacing } from '../../theme';
 import type { WardrobeStackParamList } from '../../navigation/types';
 
 export function WardrobeListScreen() {
+  const { t: text, tPlural } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<WardrobeStackParamList>>();
   const [category, setCategory] = useState<ClothingCategory | undefined>(undefined);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [search, setSearch] = useState('');
 
   const { data, isLoading, isError, refetch, isRefetching } = useWardrobe({
     category,
+    favorite: favoritesOnly || undefined,
     q: search.trim() || undefined,
   });
+  const filtered = Boolean(category || favoritesOnly || search.trim());
 
   return (
     <Screen padded={false}>
       <View style={styles.top}>
         <Header
-          title="Wardrobe"
-          subtitle="Everything you own, in one place"
-          right={<Button label="Add" icon="+" fullWidth={false} onPress={() => navigation.navigate('AddItem')} />}
+          title={text('wardrobe.title')}
+          subtitle={text('wardrobe.subtitle')}
+          right={
+            <Button
+              label={text('common.add')}
+              icon="+"
+              fullWidth={false}
+              onPress={() => navigation.navigate('AddItem')}
+            />
+          }
         />
         <TextField
-          placeholder="Search e.g. black skirt"
+          placeholder={text('wardrobe.searchPlaceholder')}
           value={search}
           onChangeText={setSearch}
           returnKeyType="search"
@@ -46,38 +60,49 @@ export function WardrobeListScreen() {
         <View style={styles.filters}>
           <FlatList
             horizontal
-            data={['ALL', ...CLOTHING_CATEGORIES]}
+            data={['ALL', 'FAVORITES', ...CLOTHING_CATEGORIES]}
             keyExtractor={(c) => c}
             showsHorizontalScrollIndicator={false}
             ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
-            renderItem={({ item }) => (
-              <Chip
-                label={item === 'ALL' ? 'All' : titleCase(item)}
-                selected={item === 'ALL' ? !category : category === item}
-                onPress={() => setCategory(item === 'ALL' ? undefined : (item as ClothingCategory))}
-              />
-            )}
+            renderItem={({ item }) => {
+              if (item === 'FAVORITES') {
+                return (
+                  <Chip
+                    label={text('wardrobe.favoritesFilter')}
+                    selected={favoritesOnly}
+                    onPress={() => setFavoritesOnly((on) => !on)}
+                  />
+                );
+              }
+              return (
+                <Chip
+                  label={item === 'ALL' ? text('common.all') : labels.clothingCategory(item as ClothingCategory)}
+                  selected={item === 'ALL' ? !category : category === item}
+                  onPress={() => setCategory(item === 'ALL' ? undefined : (item as ClothingCategory))}
+                />
+              );
+            }}
           />
         </View>
       </View>
 
       {isLoading ? (
-        <LoadingState message="Loading your wardrobe…" />
+        <LoadingState message={text('wardrobe.loading')} />
       ) : isError ? (
         <EmptyState
           icon="warning"
-          title="Couldn't load your wardrobe"
-          message="Check your connection and try again."
-          actionLabel="Retry"
+          title={text('wardrobe.loadError')}
+          message={text('common.checkConnection')}
+          actionLabel={text('common.retry')}
           onAction={() => refetch()}
         />
       ) : !data || data.length === 0 ? (
         <EmptyState
           icon="wardrobe"
-          title="Your wardrobe is empty"
-          message="Add your first piece — snap a photo and we'll fill in the details for you."
-          actionLabel="+ Add an item"
-          onAction={() => navigation.navigate('AddItem')}
+          title={filtered ? text('wardrobe.emptyFilteredTitle') : text('wardrobe.emptyTitle')}
+          message={filtered ? text('wardrobe.emptyFilteredMessage') : text('wardrobe.emptyMessage')}
+          actionLabel={filtered ? undefined : text('wardrobe.emptyAction')}
+          onAction={filtered ? undefined : () => navigation.navigate('AddItem')}
         />
       ) : (
         <FlatList
@@ -92,7 +117,7 @@ export function WardrobeListScreen() {
             <View style={styles.cell}>
               <ItemTile
                 title={item.name}
-                subtitle={titleCase(item.category)}
+                subtitle={labels.clothingCategory(item.category)}
                 imageUrl={item.imageUrl}
                 favorite={item.favorite}
                 onPress={() => navigation.navigate('ItemDetail', { item })}
@@ -102,7 +127,7 @@ export function WardrobeListScreen() {
           ListFooterComponent={
             data.length > 0 ? (
               <AppText variant="caption" tone="muted" center style={styles.count}>
-                {data.length} item{data.length === 1 ? '' : 's'}
+                {tPlural('wardrobe.countItems', data.length)}
               </AppText>
             ) : null
           }
@@ -110,10 +135,6 @@ export function WardrobeListScreen() {
       )}
     </Screen>
   );
-}
-
-function titleCase(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase();
 }
 
 const styles = StyleSheet.create({

@@ -15,6 +15,7 @@ import {
   isPasswordStrong,
 } from '../../components/ui';
 import { useRegister } from '../../features/auth';
+import { useT } from '../../i18n';
 import { spacing } from '../../theme';
 import type { AuthStackParamList } from '../../navigation/types';
 
@@ -29,6 +30,7 @@ type FieldErrors = {
 const USERNAME_RE = /^[a-zA-Z0-9._]{3,30}$/;
 
 export function RegisterScreen() {
+  const { t: text } = useT();
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
   const register = useRegister();
   const [username, setUsername] = useState('');
@@ -44,14 +46,13 @@ export function RegisterScreen() {
   const onSubmit = () => {
     const next: FieldErrors = {};
     const handle = username.trim();
-    if (!handle) next.username = 'Username must not be blank';
-    else if (!USERNAME_RE.test(handle))
-      next.username = 'Username must be 3–30 characters: letters, numbers, . or _';
-    if (!email.trim()) next.email = 'Email must not be blank';
-    if (!password) next.password = 'Password must not be blank';
-    else if (!isPasswordStrong(password)) next.password = 'Password does not meet the rules below';
-    if (!confirmPassword) next.confirm = 'Please re-enter your password';
-    else if (password !== confirmPassword) next.confirm = 'Passwords do not match';
+    if (!handle) next.username = text('auth.validation.usernameBlank');
+    else if (!USERNAME_RE.test(handle)) next.username = text('auth.validation.usernamePattern');
+    if (!email.trim()) next.email = text('auth.validation.emailBlank');
+    if (!password) next.password = text('auth.validation.passwordBlank');
+    else if (!isPasswordStrong(password)) next.password = text('auth.validation.passwordWeak');
+    if (!confirmPassword) next.confirm = text('auth.validation.confirmRequired');
+    else if (password !== confirmPassword) next.confirm = text('auth.validation.passwordsDontMatch');
     setErrors(next);
     if (next.username || next.email || next.password || next.confirm) return;
 
@@ -75,11 +76,15 @@ export function RegisterScreen() {
 
   return (
     <Screen scroll>
-      <Header title="Create account" subtitle="Takes less than a minute" onBack={() => navigation.goBack()} />
+      <Header
+        title={text('auth.createAccount')}
+        subtitle={text('auth.createAccountSubtitle')}
+        onBack={() => navigation.goBack()}
+      />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.form}>
           <TextField
-            label="Username"
+            label={text('auth.username')}
             value={username}
             onChangeText={(t) => {
               setUsername(t);
@@ -87,12 +92,12 @@ export function RegisterScreen() {
             }}
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="your_username"
-            hint="Only use: Letters, numbers, . and _"
+            placeholder={text('auth.usernamePlaceholder')}
+            hint={text('auth.usernameHint')}
             error={errors.username}
           />
           <TextField
-            label="Email"
+            label={text('auth.email')}
             value={email}
             onChangeText={(t) => {
               setEmail(t);
@@ -100,12 +105,12 @@ export function RegisterScreen() {
             }}
             autoCapitalize="none"
             keyboardType="email-address"
-            placeholder="you@example.com"
+            placeholder={text('auth.emailPlaceholder')}
             error={errors.email}
           />
           <View>
             <TextField
-              label="Password"
+              label={text('auth.password')}
               value={password}
               onChangeText={(t) => {
                 setPassword(t);
@@ -114,20 +119,20 @@ export function RegisterScreen() {
               onFocus={() => setPasswordFocused(true)}
               onBlur={() => setPasswordFocused(false)}
               secureTextEntry
-              placeholder="Create a strong password"
+              placeholder={text('auth.passwordCreatePlaceholder')}
               error={errors.password}
             />
             {passwordFocused ? <PasswordChecklist password={password} /> : null}
           </View>
           <TextField
-            label="Confirm password"
+            label={text('auth.confirmPassword')}
             value={confirmPassword}
             onChangeText={(t) => {
               setConfirmPassword(t);
               clearError('confirm');
             }}
             secureTextEntry
-            placeholder="Re-enter your password"
+            placeholder={text('auth.confirmPasswordPlaceholder')}
             error={errors.confirm}
           />
           {errors.form ? (
@@ -136,7 +141,7 @@ export function RegisterScreen() {
             </AppText>
           ) : null}
           <Button
-            label="Create account"
+            label={text('auth.createAccount')}
             onPress={onSubmit}
             loading={register.isPending}
             style={styles.cta}
@@ -145,8 +150,8 @@ export function RegisterScreen() {
 
         <View style={styles.footer}>
           <LinkText
-            lead="Already have an account? "
-            action="Log in"
+            lead={text('auth.alreadyHaveAccount')}
+            action={text('auth.logIn')}
             onPress={() => navigation.navigate('Login')}
           />
         </View>

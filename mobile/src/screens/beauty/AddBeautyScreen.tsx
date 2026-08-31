@@ -7,10 +7,12 @@ import { Image, StyleSheet, View } from 'react-native';
 import { toApiError } from '../../api/client';
 import { AppText, Button, Card, Header, Icon, LoadingState, Screen } from '../../components/ui';
 import { useAnalyzeBeauty } from '../../features/beauty';
+import { useT } from '../../i18n';
 import { colors, radius, spacing } from '../../theme';
 import type { BeautyStackParamList } from '../../navigation/types';
 
 export function AddBeautyScreen() {
+  const { t: text } = useT();
   const navigation = useNavigation<NativeStackNavigationProp<BeautyStackParamList>>();
   const analyze = useAnalyzeBeauty();
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export function AddBeautyScreen() {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError('We need permission to access your ' + (mode === 'camera' ? 'camera' : 'photos') + '.');
+      setError(text(mode === 'camera' ? 'item.permissionCamera' : 'item.permissionPhotos'));
       return;
     }
     const result =
@@ -49,7 +51,7 @@ export function AddBeautyScreen() {
 
   return (
     <Screen scroll>
-      <Header title="Add a product" subtitle="Snap it — we'll fill in the details" onBack={() => navigation.goBack()} />
+      <Header title={text('beautyForm.addTitle')} subtitle={text('beautyForm.addSubtitle')} onBack={() => navigation.goBack()} />
 
       <Card style={styles.preview} padded={false}>
         {imageUri ? (
@@ -58,18 +60,19 @@ export function AddBeautyScreen() {
           <View style={styles.placeholder}>
             <Icon name="beauty" size={72} />
             <AppText variant="body" tone="secondary" center>
-              Take a photo or choose one from your library
+              {text('beautyForm.addHint')}
             </AppText>
           </View>
         )}
       </Card>
 
       {analyze.isPending ? (
-        <LoadingState message="Analyzing your product…" />
+        <LoadingState message={text('beautyForm.analyzing')} />
       ) : (
         <View style={styles.actions}>
-          <Button label="Take photo" iconName="camera" onPress={() => pick('camera')} />
-          <Button label="Choose from library" iconName="gallery" variant="secondary" onPress={() => pick('library')} />
+          <Button label={text('beautyForm.searchByName')} iconName="shop" onPress={() => navigation.navigate('BeautySearch')} />
+          <Button label={text('beautyForm.takePhoto')} iconName="camera" variant="secondary" onPress={() => pick('camera')} />
+          <Button label={text('beautyForm.chooseFromLibrary')} iconName="gallery" variant="ghost" onPress={() => pick('library')} />
         </View>
       )}
 
@@ -79,7 +82,7 @@ export function AddBeautyScreen() {
             {`⚠ ${error}`}
           </AppText>
           <Button
-            label="Add manually instead"
+            label={text('beautyForm.addManually')}
             variant="ghost"
             style={styles.manual}
             onPress={() =>

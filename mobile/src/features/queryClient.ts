@@ -13,6 +13,6 @@ export const queryClient = new QueryClient({
 export const queryKeys = {
   wardrobe: (params?: unknown) => ['wardrobe', params ?? {}] as const,
   wardrobeRecent: ['wardrobe', 'recent'] as const,
-  beauty: (category?: string) => ['beauty', category ?? 'all'] as const,
+  beauty: (query?: Record<string, unknown>) => ['beauty', query ?? {}] as const,
   savedLooks: ['outfits', 'saved'] as const,
 };

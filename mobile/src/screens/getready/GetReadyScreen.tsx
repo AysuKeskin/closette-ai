@@ -1,13 +1,12 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { toApiError } from '../../api/client';
 import {
   AppText,
   Button,
   Card,
-  Chip,
   Header,
   ItemTile,
   LoadingState,
@@ -15,23 +14,27 @@ import {
   TextField,
 } from '../../components/ui';
 import type { GeneratedLook } from '../../api/types';
-import { useGenerateLook, useSaveLook } from '../../features/outfits';
+import { useDeleteLook, useGenerateLook, useSaveLook } from '../../features/outfits';
+import { useT, type TranslationKey } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
 import { colors, radius, spacing } from '../../theme';
 
 // A pool of occasions; we show a rotating handful each time the screen opens.
-const OCCASION_POOL = [
-  'Dinner with friends',
-  'Office day, put-together',
-  'Weekend brunch',
-  'First date',
-  'Coffee run, comfy but cute',
-  'A wedding guest look',
-  'Rainy day errands',
-  'Night out dancing',
-  'Work-from-home but presentable',
-  'Sunday walk in the park',
-  'Job interview',
-  'Beach day',
+// The suggestion is also what gets sent to the stylist, so it travels in the
+// user's own language — which is exactly what the model should read.
+const OCCASION_POOL: TranslationKey[] = [
+  'getReady.suggestions.dinner',
+  'getReady.suggestions.office',
+  'getReady.suggestions.brunch',
+  'getReady.suggestions.firstDate',
+  'getReady.suggestions.coffee',
+  'getReady.suggestions.wedding',
+  'getReady.suggestions.errands',
+  'getReady.suggestions.dancing',
+  'getReady.suggestions.wfh',
+  'getReady.suggestions.walk',
+  'getReady.suggestions.interview',
+  'getReady.suggestions.beach',
 ];
 
 function sample<T>(arr: T[], n: number): T[] {
@@ -39,13 +42,17 @@ function sample<T>(arr: T[], n: number): T[] {
 }
 
 export function GetReadyScreen() {
+  const { t: text } = useT();
+  const labels = useDomainLabels();
   const generate = useGenerateLook();
   const saveLook = useSaveLook();
+  const deleteLook = useDeleteLook();
   const [prompt, setPrompt] = useState('');
   const [look, setLook] = useState<GeneratedLook | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>(() => sample(OCCASION_POOL, 3));
+  // Holds the saved outfit's id while this look is saved; null means not saved.
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<TranslationKey[]>(() => sample(OCCASION_POOL, 3));
 
   // Re-roll the suggestions each time the tab is opened.
   useFocusEffect(
@@ -58,7 +65,7 @@ export function GetReadyScreen() {
     const value = text.trim();
     if (!value) return;
     setError(null);
-    setSaved(false);
+    setSavedId(null);
     setPrompt(value);
     generate.mutate(
       { prompt: value, occasion: value },
@@ -69,37 +76,54 @@ export function GetReadyScreen() {
     );
   };
 
-  const onSave = () => {
+  // The Save button is a toggle: save creates the outfit and keeps its id; tapping
+  // again while saved deletes it (un-save) and clears the id.
+  const onToggleSave = () => {
     if (!look || look.items.length === 0) return;
+    if (savedId) {
+      deleteLook.mutate(savedId, { onSuccess: () => setSavedId(null) });
+      return;
+    }
     saveLook.mutate(
-      { title: look.title, occasion: prompt, itemIds: look.items.map((i) => i.id) },
-      { onSuccess: () => setSaved(true) },
+      { title: look.title, occasion: prompt, rationale: look.rationale, itemIds: look.items.map((i) => i.id) },
+      { onSuccess: (outfit) => setSavedId(outfit.id) },
     );
   };
 
   return (
     <Screen scroll>
-      <Header title="Get Ready" subtitle="Tell me the occasion — I'll style a complete look" />
+      <Header title={text('getReady.title')} subtitle={text('getReady.subtitle')} />
 
       <TextField
-        placeholder="e.g. Dinner with friends, relaxed but chic"
+        placeholder={text('getReady.placeholder')}
         value={prompt}
         onChangeText={setPrompt}
         multiline
         style={styles.input}
       />
 
-      <AppText variant="caption" tone="muted" style={styles.tryLabel}>
-        Try one of these
+      <AppText variant="label" tone="secondary" style={styles.tryLabel}>
+        {text('getReady.tryOne')}
       </AppText>
       <View style={styles.suggestions}>
-        {suggestions.map((s) => (
-          <Chip key={s} label={s} onPress={() => run(s)} />
+        {suggestions.map((key) => (
+          <Pressable
+            key={key}
+            onPress={() => run(text(key))}
+            accessibilityRole="button"
+            hitSlop={8}
+            style={({ pressed }) => [styles.suggestRow, pressed && styles.suggestPressed]}
+          >
+            <AppText style={styles.suggestArrow}>›</AppText>
+            <AppText variant="body" tone="secondary" style={styles.suggestText}>
+              {text(key)}
+            </AppText>
+          </Pressable>
         ))}
       </View>
 
       <Button
-        label="Create my look"
+        label={text('getReady.createLook')}
         iconName="ai-magic"
         onPress={() => run(prompt)}
         loading={generate.isPending}
@@ -112,7 +136,7 @@ export function GetReadyScreen() {
         </Card>
       ) : null}
 
-      {generate.isPending ? <LoadingState message="Styling your look…" /> : null}
+      {generate.isPending ? <LoadingState message={text('getReady.styling')} /> : null}
 
       {look && !generate.isPending ? (
         <Card style={styles.result}>
@@ -132,7 +156,7 @@ export function GetReadyScreen() {
                 <ItemTile
                   width={120}
                   title={item.name}
-                  subtitle={item.category.toLowerCase()}
+                  subtitle={labels.clothingCategory(item.category)}
                   imageUrl={item.imageUrl}
                 />
               )}
@@ -143,20 +167,21 @@ export function GetReadyScreen() {
           {look.items.length > 0 ? (
             <View style={styles.actions}>
               <Button
-                label={saved ? '✓ Saved' : '♥ Save look'}
-                variant={saved ? 'secondary' : 'primary'}
-                onPress={onSave}
-                disabled={saved}
-                loading={saveLook.isPending}
+                label={savedId ? text('getReady.saved') : text('getReady.saveLook')}
+                iconName={savedId ? 'love' : 'save'}
+                variant={savedId ? 'secondary' : 'primary'}
+                size="sm"
+                onPress={onToggleSave}
+                loading={saveLook.isPending || deleteLook.isPending}
                 fullWidth={false}
-                style={styles.actionBtn}
               />
               <Button
-                label="Try another"
+                label={text('getReady.tryAnother')}
+                iconName="ai-magic"
                 variant="ghost"
+                size="sm"
                 onPress={() => run(prompt)}
                 fullWidth={false}
-                style={styles.actionBtn}
               />
             </View>
           ) : null}
@@ -169,12 +194,17 @@ export function GetReadyScreen() {
 const styles = StyleSheet.create({
   input: { minHeight: 80, paddingTop: spacing.md, textAlignVertical: 'top' },
   tryLabel: { marginTop: spacing.lg, marginLeft: spacing.xs },
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  // Suggestions as quiet tappable text (not pills), so they read as prompts, not buttons.
+  suggestions: { marginTop: spacing.xs },
+  suggestRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  suggestPressed: { opacity: 0.55 },
+  suggestArrow: { color: colors.primary, fontSize: 18, fontWeight: '700' },
+  suggestText: { flex: 1 },
   cta: { marginTop: spacing.xl },
   errorCard: { marginTop: spacing.lg },
   result: { marginTop: spacing.xl, gap: spacing.sm, borderRadius: radius.lg, backgroundColor: colors.surface },
   rationale: { marginBottom: spacing.sm },
   items: { marginTop: spacing.sm },
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
   actionBtn: { paddingHorizontal: spacing.lg },
 });

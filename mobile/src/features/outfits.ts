@@ -13,7 +13,16 @@ export function useGenerateLook() {
 export function useSaveLook() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { title: string; occasion?: string; itemIds: string[] }) => outfitApi.save(p),
+    mutationFn: (p: { title: string; occasion?: string; rationale?: string; itemIds: string[] }) =>
+      outfitApi.save(p),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['outfits'] }),
+  });
+}
+
+export function useDeleteLook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => outfitApi.remove(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['outfits'] }),
   });
 }

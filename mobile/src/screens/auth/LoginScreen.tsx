@@ -6,12 +6,14 @@ import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { toApiError, toFieldErrors } from '../../api/client';
 import { AppText, Button, Icon, LinkText, Screen, TextField } from '../../components/ui';
 import { useLogin } from '../../features/auth';
+import { useT } from '../../i18n';
 import { spacing } from '../../theme';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type FieldErrors = { email?: string; password?: string; form?: string };
 
 export function LoginScreen() {
+  const { t: text } = useT();
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
   const login = useLogin();
   const [email, setEmail] = useState('');
@@ -21,8 +23,8 @@ export function LoginScreen() {
   const onSubmit = () => {
     // Per-field validation first, so each message renders under its own input.
     const next: FieldErrors = {};
-    if (!email.trim()) next.email = 'Email must not be blank';
-    if (!password) next.password = 'Password must not be blank';
+    if (!email.trim()) next.email = text('auth.validation.emailBlank');
+    if (!password) next.password = text('auth.validation.passwordBlank');
     setErrors(next);
     if (next.email || next.password) return;
 
@@ -54,13 +56,13 @@ export function LoginScreen() {
             </AppText>
           </View>
           <AppText variant="body" tone="secondary">
-            Your wardrobe & beauty, beautifully in one place.
+            {text('auth.tagline')}
           </AppText>
         </View>
 
         <View style={styles.form}>
           <TextField
-            label="Email"
+            label={text('auth.email')}
             value={email}
             onChangeText={(t) => {
               setEmail(t);
@@ -69,18 +71,18 @@ export function LoginScreen() {
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder={text('auth.emailPlaceholder')}
             error={errors.email}
           />
           <TextField
-            label="Password"
+            label={text('auth.password')}
             value={password}
             onChangeText={(t) => {
               setPassword(t);
               if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
             }}
             secureTextEntry
-            placeholder="••••••••"
+            placeholder={text('auth.passwordPlaceholder')}
             error={errors.password}
           />
           {errors.form ? (
@@ -90,17 +92,17 @@ export function LoginScreen() {
           ) : null}
           <View style={styles.forgotRow}>
             <LinkText
-              action="Forgot password?"
+              action={text('auth.forgotPassword')}
               onPress={() => navigation.navigate('ForgotPassword', { email: email.trim() || undefined })}
             />
           </View>
-          <Button label="Log in" onPress={onSubmit} loading={login.isPending} />
+          <Button label={text('auth.logIn')} onPress={onSubmit} loading={login.isPending} />
         </View>
 
         <View style={styles.footer}>
           <LinkText
-            lead="New here? "
-            action="Create an account"
+            lead={text('auth.newHere')}
+            action={text('auth.createAnAccount')}
             onPress={() => navigation.navigate('Register')}
           />
         </View>

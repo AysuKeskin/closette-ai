@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { useT } from '../../i18n';
 import { colors, feedback, palette, radius, spacing } from '../../theme';
 import { AppText } from './AppText';
 import { Icon } from './Icon';
@@ -15,10 +16,11 @@ type Props = {
  * the account is unverified; tapping opens the code screen.
  */
 export function VerifyBanner({ onPress, message }: Props) {
+  const { t } = useT();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Verify your email"
+      accessibilityLabel={t('auth.verifyBannerTitle')}
       onPress={onPress}
       android_ripple={{ color: feedback.ripple, borderless: false }}
       style={({ pressed }) => [styles.banner, pressed && styles.pressed]}
@@ -28,10 +30,10 @@ export function VerifyBanner({ onPress, message }: Props) {
       </View>
       <View style={styles.text}>
         <AppText variant="label" style={styles.title}>
-          Verify your email
+          {t('auth.verifyBannerTitle')}
         </AppText>
         <AppText variant="caption" tone="secondary" numberOfLines={2}>
-          {message ?? 'Enter the code we sent to unlock everything.'}
+          {message ?? t('auth.verifyBannerHint')}
         </AppText>
       </View>
       <AppText style={styles.chevron}>›</AppText>

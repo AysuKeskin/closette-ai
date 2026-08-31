@@ -13,10 +13,24 @@ type Props = {
   onPress?: () => void;
   /** When set, a visible ✕ delete button appears in the corner. */
   onDelete?: () => void;
+  /** When set, the favourite badge becomes a tappable toggle. */
+  onToggleFavorite?: () => void;
+  /** Accessible label for that toggle, e.g. "Remove from favorites". */
+  favoriteLabel?: string;
 };
 
 /** Image-forward tile for wardrobe/beauty items and Home rails. */
-export function ItemTile({ title, subtitle, imageUrl, favorite, width, onPress, onDelete }: Props) {
+export function ItemTile({
+  title,
+  subtitle,
+  imageUrl,
+  favorite,
+  width,
+  onPress,
+  onDelete,
+  onToggleFavorite,
+  favoriteLabel,
+}: Props) {
   return (
     <Pressable
       onPress={onPress}
@@ -33,16 +47,27 @@ export function ItemTile({ title, subtitle, imageUrl, favorite, width, onPress, 
           </View>
         )}
         {favorite ? (
-          <View style={[styles.badge, onDelete ? styles.badgeLeft : styles.badgeRight]}>
+          <Pressable
+            onPress={onToggleFavorite}
+            disabled={!onToggleFavorite}
+            hitSlop={10}
+            accessibilityRole={onToggleFavorite ? 'button' : undefined}
+            accessibilityLabel={favoriteLabel}
+            style={({ pressed }) => [
+              styles.badge,
+              onDelete ? styles.badgeLeft : styles.badgeRight,
+              pressed && onToggleFavorite ? styles.badgePressed : undefined,
+            ]}
+          >
             <Icon name="love" size={15} />
-          </View>
+          </Pressable>
         ) : null}
         {onDelete ? (
           <Pressable
             onPress={onDelete}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel={`Delete ${title}`}
+            accessibilityLabel={title}
             style={({ pressed }) => [styles.delete, pressed && styles.deletePressed]}
           >
             <AppText style={styles.deleteGlyph}>✕</AppText>
@@ -84,6 +109,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeRight: { right: spacing.xs },
+  badgePressed: { opacity: feedback.pressOpacity, transform: [{ scale: 0.9 }] },
   badgeLeft: { left: spacing.xs },
   delete: {
     position: 'absolute',

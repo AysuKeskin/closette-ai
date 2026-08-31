@@ -15,14 +15,14 @@ import {
   Screen,
 } from '../../components/ui';
 import { useDeleteItem, useSimilarItems, useToggleFavorite } from '../../features/wardrobe';
+import { useT } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
 import { colors, feedback, radius, spacing, typography } from '../../theme';
 import type { WardrobeStackParamList } from '../../navigation/types';
 
-function titleCase(v: string): string {
-  return v.charAt(0) + v.slice(1).toLowerCase();
-}
-
 export function ItemDetailScreen() {
+  const { t: text } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<WardrobeStackParamList>>();
   const { item } = useRoute<RouteProp<WardrobeStackParamList, 'ItemDetail'>>().params;
   const similar = useSimilarItems(item.id);
@@ -36,22 +36,22 @@ export function ItemDetailScreen() {
   };
 
   const onDelete = () => {
-    Alert.alert('Delete item?', `"${item.name}" will be removed. This can't be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(text('item.deleteTitle'), text('item.deleteBody', { name: item.name }), [
+      { text: text('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: text('common.delete'),
         style: 'destructive',
         onPress: () => deleteItem.mutate(item.id, { onSuccess: () => navigation.goBack() }),
       },
     ]);
   };
 
-  const meta = [titleCase(item.category), item.subcategory].filter(Boolean).join(' · ');
+  const meta = [labels.clothingCategory(item.category), item.subcategory].filter(Boolean).join(' · ');
   const tags = [...item.colors, ...item.styles, ...item.seasons];
 
   return (
     <Screen scroll>
-      <Header title="Item" onBack={() => navigation.goBack()} />
+      <Header title={text('item.detailTitle')} onBack={() => navigation.goBack()} />
 
       <View style={styles.imageWrap}>
         {item.imageUrl ? (
@@ -74,21 +74,21 @@ export function ItemDetailScreen() {
       {item.brand ? (
         <AppText variant="label" tone="secondary" style={styles.brand}>
           {item.brand}
-          {item.size ? ` · Size ${item.size}` : ''}
+          {item.size ? text('item.sizeLabel', { size: item.size }) : ''}
         </AppText>
       ) : null}
 
       {tags.length > 0 ? (
         <View style={styles.tags}>
-          {tags.map((t, i) => (
-            <Chip key={`${t}-${i}`} label={titleCase(t)} />
+          {tags.map((tag, i) => (
+            <Chip key={`${tag}-${i}`} label={labels.tag(tag)} />
           ))}
         </View>
       ) : null}
 
       <View style={styles.actions}>
         <Button
-          label={fav ? '♥ Favorited' : '♡ Add to favorites'}
+          label={fav ? text('item.favorited') : text('item.addToFavorites')}
           variant={fav ? 'primary' : 'secondary'}
           onPress={onToggleFav}
         />
@@ -96,10 +96,10 @@ export function ItemDetailScreen() {
 
       <View style={styles.similar}>
         <AppText variant="title" style={styles.similarTitle}>
-          Similar in your closet
+          {text('item.similarTitle')}
         </AppText>
         {similar.isLoading ? (
-          <LoadingState message="Finding similar pieces…" />
+          <LoadingState message={text('item.findingSimilar')} />
         ) : similar.data && similar.data.length > 0 ? (
           <FlatList
             horizontal
@@ -111,7 +111,7 @@ export function ItemDetailScreen() {
               <ItemTile
                 width={124}
                 title={sim.name}
-                subtitle={titleCase(sim.category)}
+                subtitle={labels.clothingCategory(sim.category)}
                 imageUrl={sim.imageUrl}
                 favorite={sim.favorite}
                 onPress={() => navigation.push('ItemDetail', { item: sim })}
@@ -121,7 +121,7 @@ export function ItemDetailScreen() {
         ) : (
           <Card>
             <AppText variant="body" tone="secondary">
-              Nothing similar yet — add more pieces and we'll match them by look.
+              {text('item.noSimilar')}
             </AppText>
           </Card>
         )}
@@ -131,7 +131,7 @@ export function ItemDetailScreen() {
         onPress={onDelete}
         style={({ pressed }) => [styles.delete, pressed && styles.deletePressed]}
       >
-        <AppText style={styles.deleteLabel}>Delete item</AppText>
+        <AppText style={styles.deleteLabel}>{text('item.deleteItem')}</AppText>
       </Pressable>
     </Screen>
   );

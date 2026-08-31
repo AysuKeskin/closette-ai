@@ -1,15 +1,16 @@
 import { StyleSheet, View } from 'react-native';
 
+import { useT, type TranslationKey } from '../../i18n';
 import { colors, radius, spacing, typography } from '../../theme';
 import { AppText } from './AppText';
 
 /** A single password rule + how to test it. Kept in sync with the backend regex
  * `^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,100}$` so client and server never disagree. */
-export const PASSWORD_RULES: { label: string; test: (pw: string) => boolean }[] = [
-  { label: 'At least 8 characters', test: (pw) => pw.length >= 8 },
-  { label: 'One lowercase letter (a–z)', test: (pw) => /[a-z]/.test(pw) },
-  { label: 'One uppercase letter (A–Z)', test: (pw) => /[A-Z]/.test(pw) },
-  { label: 'One number (0–9)', test: (pw) => /\d/.test(pw) },
+export const PASSWORD_RULES: { label: TranslationKey; test: (pw: string) => boolean }[] = [
+  { label: 'auth.passwordRules.length', test: (pw) => pw.length >= 8 },
+  { label: 'auth.passwordRules.lowercase', test: (pw) => /[a-z]/.test(pw) },
+  { label: 'auth.passwordRules.uppercase', test: (pw) => /[A-Z]/.test(pw) },
+  { label: 'auth.passwordRules.number', test: (pw) => /\d/.test(pw) },
 ];
 
 /** Every required rule passes → the password is accepted. */
@@ -22,12 +23,12 @@ function metCount(pw: string): number {
   return PASSWORD_RULES.reduce((n, r) => n + (r.test(pw) ? 1 : 0), 0);
 }
 
-const STRENGTH = [
-  { label: 'Too weak', color: colors.danger },
-  { label: 'Weak', color: colors.danger },
-  { label: 'Fair', color: colors.warning },
-  { label: 'Good', color: colors.warning },
-  { label: 'Strong', color: colors.success },
+const STRENGTH: { label: TranslationKey; color: string }[] = [
+  { label: 'auth.passwordStrength.tooWeak', color: colors.danger },
+  { label: 'auth.passwordStrength.weak', color: colors.danger },
+  { label: 'auth.passwordStrength.fair', color: colors.warning },
+  { label: 'auth.passwordStrength.good', color: colors.warning },
+  { label: 'auth.passwordStrength.strong', color: colors.success },
 ];
 
 type Props = { password: string };
@@ -38,6 +39,7 @@ type Props = { password: string };
  * missing — no guessing, no submit-then-fail.
  */
 export function PasswordChecklist({ password }: Props) {
+  const { t } = useT();
   const met = metCount(password);
   const strength = STRENGTH[met];
   const barColor = password.length === 0 ? colors.border : strength.color;
@@ -57,7 +59,7 @@ export function PasswordChecklist({ password }: Props) {
       </View>
       {password.length > 0 ? (
         <AppText variant="caption" style={[styles.strengthLabel, { color: strength.color }]}>
-          {strength.label}
+          {t(strength.label)}
         </AppText>
       ) : null}
 
@@ -75,7 +77,7 @@ export function PasswordChecklist({ password }: Props) {
                 variant="caption"
                 style={{ color: ok ? colors.textPrimary : colors.textMuted }}
               >
-                {rule.label}
+                {t(rule.label)}
               </AppText>
             </View>
           );

@@ -7,10 +7,12 @@ import { toApiError, toFieldErrors } from '../../api/client';
 import { AppText, Button, Card, LinkText, Screen, TextField } from '../../components/ui';
 import { useResendVerification, useVerifyEmail } from '../../features/auth';
 import { useAuth } from '../../store/auth';
+import { splitAround, useT } from '../../i18n';
 import { spacing } from '../../theme';
 import type { AppStackParamList } from '../../navigation/types';
 
 export function VerifyEmailScreen() {
+  const { t: text } = useT();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'VerifyEmail'>>();
   const email = useAuth((s) => s.user?.email);
   const setPromptVerify = useAuth((s) => s.setPromptVerify);
@@ -30,7 +32,7 @@ export function VerifyEmailScreen() {
     setError(null);
     setNotice(null);
     if (!/^\d{6}$/.test(code.trim())) {
-      setError('Enter the 6-digit code from your email');
+      setError(text('auth.validation.codeSixDigits'));
       return;
     }
     verify.mutate(code.trim(), {
@@ -46,36 +48,40 @@ export function VerifyEmailScreen() {
     setError(null);
     setNotice(null);
     resend.mutate(undefined, {
-      onSuccess: () => setNotice('A fresh code is on its way to your inbox.'),
+      onSuccess: () => setNotice(text('auth.freshCodeSent')),
       onError: (err) => setError(toApiError(err).message),
     });
   };
+
+  // The email is emphasised inside the sentence, and it sits in a different
+  // place in each language — so the split follows the translation.
+  const [before, after] = splitAround(text('auth.verifySentTo', { email: '{email}' }), 'email');
 
   return (
     <Screen scroll>
       <View style={styles.header}>
         <AppText variant="display" tone="brand">
-          Verify your email
+          {text('auth.verifyBannerTitle')}
         </AppText>
         <AppText variant="body" tone="secondary">
-          We sent a 6-digit code to{' '}
+          {before}
           <AppText variant="body" tone="brand">
-            {email ?? 'your email'}
+            {email ?? text('auth.yourEmail')}
           </AppText>
-          . Enter it below to verify — or do it later.
+          {after}
         </AppText>
       </View>
 
       <View style={styles.form}>
         <TextField
-          label="Verification code"
+          label={text('auth.verificationCode')}
           value={code}
           onChangeText={(t) => {
             setCode(t.replace(/[^0-9]/g, '').slice(0, 6));
             if (error) setError(null);
           }}
           keyboardType="number-pad"
-          placeholder="123456"
+          placeholder={text('auth.codePlaceholder')}
           maxLength={6}
           error={error}
           style={styles.codeInput}
@@ -88,19 +94,19 @@ export function VerifyEmailScreen() {
           </Card>
         ) : null}
 
-        <Button label="Verify email" onPress={onVerify} loading={verify.isPending} />
+        <Button label={text('auth.verifyEmail')} onPress={onVerify} loading={verify.isPending} />
 
         <View style={styles.resendRow}>
           <LinkText
-            lead="Didn't get it? "
-            action={resend.isPending ? 'Sending…' : 'Resend code'}
+            lead={text('auth.didntGetIt')}
+            action={resend.isPending ? text('auth.sending') : text('auth.resendCode')}
             onPress={onResend}
           />
         </View>
       </View>
 
       <View style={styles.footer}>
-        <LinkText action="I'll do this later" onPress={dismiss} />
+        <LinkText action={text('auth.doThisLater')} onPress={dismiss} />
       </View>
     </Screen>
   );

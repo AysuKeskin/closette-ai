@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { Alert, FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 
 import {
   AppText,
@@ -14,72 +14,84 @@ import {
   LoadingState,
   Screen,
 } from '../../components/ui';
-import { BEAUTY_CATEGORIES } from '../../api/types';
-import { useBeauty, useDeleteBeauty } from '../../features/beauty';
+import { BEAUTY_CATEGORIES, type BeautyCategory } from '../../api/types';
+import { useBeauty } from '../../features/beauty';
+import { useT } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
 import { spacing } from '../../theme';
 import type { BeautyStackParamList } from '../../navigation/types';
 
-function titleCase(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase();
-}
-
 export function BeautyScreen() {
+  const { t: text } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<BeautyStackParamList>>();
-  const [category, setCategory] = useState<string | undefined>(undefined);
-  const { data, isLoading, isError, refetch, isRefetching } = useBeauty(category);
-  const deleteBeauty = useDeleteBeauty();
-
-  const confirmDelete = (id: string, name: string) => {
-    Alert.alert(
-      'Delete product?',
-      `"${name}" will be removed from your shelf. This can't be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteBeauty.mutate(id) },
-      ],
-    );
-  };
+  const [category, setCategory] = useState<BeautyCategory | undefined>(undefined);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const { data, isLoading, isError, refetch, isRefetching } = useBeauty({
+    category,
+    favorite: favoritesOnly || undefined,
+  });
+  const filtered = Boolean(category || favoritesOnly);
 
   return (
     <Screen padded={false}>
       <View style={styles.top}>
         <Header
-          title="Beauty"
-          subtitle="Skincare, makeup & more"
-          right={<Button label="Add" icon="+" fullWidth={false} onPress={() => navigation.navigate('AddBeauty')} />}
+          title={text('beauty.title')}
+          subtitle={text('beauty.subtitle')}
+          right={
+            <Button
+              label={text('common.add')}
+              icon="+"
+              fullWidth={false}
+              onPress={() => navigation.navigate('AddBeauty')}
+            />
+          }
         />
         <FlatList
           horizontal
-          data={['ALL', ...BEAUTY_CATEGORIES]}
+          data={['ALL', 'FAVORITES', ...BEAUTY_CATEGORIES]}
           keyExtractor={(c) => c}
           showsHorizontalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={{ width: spacing.sm }} />}
-          renderItem={({ item }) => (
-            <Chip
-              label={item === 'ALL' ? 'All' : titleCase(item)}
-              selected={item === 'ALL' ? !category : category === item}
-              onPress={() => setCategory(item === 'ALL' ? undefined : item)}
-            />
-          )}
+          renderItem={({ item }) => {
+            if (item === 'FAVORITES') {
+              return (
+                <Chip
+                  label={text('beauty.favoritesFilter')}
+                  selected={favoritesOnly}
+                  onPress={() => setFavoritesOnly((on) => !on)}
+                />
+              );
+            }
+            return (
+              <Chip
+                label={item === 'ALL' ? text('common.all') : labels.beautyCategory(item as BeautyCategory)}
+                selected={item === 'ALL' ? !category : category === item}
+                onPress={() => setCategory(item === 'ALL' ? undefined : (item as BeautyCategory))}
+              />
+            );
+          }}
         />
       </View>
 
       {isLoading ? (
-        <LoadingState message="Loading your beauty shelf…" />
+        <LoadingState message={text('beauty.loading')} />
       ) : isError ? (
         <EmptyState
           icon="warning"
-          title="Couldn't load your beauty items"
-          actionLabel="Retry"
+          title={text('beauty.loadError')}
+          message={text('common.checkConnection')}
+          actionLabel={text('common.retry')}
           onAction={() => refetch()}
         />
       ) : !data || data.length === 0 ? (
         <EmptyState
           icon="beauty"
-          title="Your beauty shelf is empty"
-          message="Add your first product — we’ll track its ingredients and expiry for you."
-          actionLabel="＋ Add a product"
-          onAction={() => navigation.navigate('AddBeauty')}
+          title={filtered ? text('beauty.emptyFilteredTitle') : text('beauty.emptyTitle')}
+          message={filtered ? text('beauty.emptyFilteredMessage') : text('beauty.emptyMessage')}
+          actionLabel={filtered ? undefined : text('beauty.emptyAction')}
+          onAction={filtered ? undefined : () => navigation.navigate('AddBeauty')}
         />
       ) : (
         <FlatList
@@ -94,10 +106,10 @@ export function BeautyScreen() {
             <View style={styles.cell}>
               <ItemTile
                 title={item.productName}
-                subtitle={item.brand ?? titleCase(item.category)}
+                subtitle={item.brand ?? labels.beautyCategory(item.category)}
                 imageUrl={item.imageUrl}
                 favorite={item.favorite}
-                onDelete={() => confirmDelete(item.id, item.productName)}
+                onPress={() => navigation.navigate('BeautyDetail', { item })}
               />
             </View>
           )}

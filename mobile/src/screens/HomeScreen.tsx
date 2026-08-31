@@ -1,5 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useEffect, useRef } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import {
@@ -11,19 +12,35 @@ import {
   SectionHeader,
   VerifyBanner,
 } from '../components/ui';
+import { useDomainLabels } from '../i18n/domain';
+import { useT } from '../i18n';
 import { useRecentItems } from '../features/wardrobe';
 import { useSavedLooks } from '../features/outfits';
 import { useAuth } from '../store/auth';
 import { colors, feedback, radius, spacing, typography } from '../theme';
 import { Screen } from '../components/ui';
-import { openVerifyEmail } from '../navigation/navigationRef';
+import { openLookDetail, openOnboarding, openVerifyEmail } from '../navigation/navigationRef';
+import { useStylePreferences } from '../features/preferences';
 import type { HomeStackParamList } from '../navigation/types';
 
 export function HomeScreen() {
+  const { t: text, tPlural } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const user = useAuth((s) => s.user);
   const recent = useRecentItems(10);
   const looks = useSavedLooks();
+  const prefs = useStylePreferences();
+  const onboardingShown = useRef(false);
+
+  // First run: open the style-onboarding once when it hasn't been completed.
+  useEffect(() => {
+    if (prefs.data && !prefs.data.onboardingCompleted && !onboardingShown.current) {
+      onboardingShown.current = true;
+      const t = setTimeout(() => openOnboarding(), 400);
+      return () => clearTimeout(t);
+    }
+  }, [prefs.data]);
 
   const goTab = (tab: string) => navigation.getParent()?.navigate(tab as never);
 
@@ -31,10 +48,10 @@ export function HomeScreen() {
     <Screen scroll padded={false}>
       <View style={styles.body}>
         <AppText variant="label" tone="muted">
-          {greeting()}
+          {text('home.eyebrow')}
         </AppText>
         <View style={styles.nameRow}>
-          <AppText variant="h1">Welcome</AppText>
+          <AppText variant="h1">{text('home.welcome')}</AppText>
           <Icon name="ai-magic" size={26} />
         </View>
 
@@ -48,15 +65,15 @@ export function HomeScreen() {
           <View style={styles.row}>
             <ActionCard
               icon="getready"
-              title="Get Ready"
-              subtitle="What should I wear?"
+              title={text('home.getReady')}
+              subtitle={text('home.getReadyHint')}
               tone="pink"
               onPress={() => goTab('GetReadyTab')}
             />
             <ActionCard
               icon="wardrobe"
-              title="My Stuff"
-              subtitle="View your collection"
+              title={text('home.myWardrobe')}
+              subtitle={text('home.myWardrobeHint')}
               tone="pink"
               onPress={() => goTab('WardrobeTab')}
             />
@@ -64,15 +81,15 @@ export function HomeScreen() {
           <View style={styles.row}>
             <ActionCard
               icon="shop"
-              title="Should I Buy This?"
-              subtitle="Check before you shop"
+              title={text('home.shouldIBuy')}
+              subtitle={text('home.shouldIBuyHint')}
               tone="pink"
               onPress={() => navigation.navigate('ShopAssistant')}
             />
             <ActionCard
               icon="beauty"
-              title="Beauty"
-              subtitle="Your beauty collection"
+              title={text('home.beauty')}
+              subtitle={text('home.beautyHint')}
               tone="pink"
               onPress={() => goTab('BeautyTab')}
             />
@@ -81,8 +98,8 @@ export function HomeScreen() {
 
         <View style={styles.section}>
           <SectionHeader
-            title="Recently added"
-            actionLabel="See all"
+            title={text('home.recentlyAdded')}
+            actionLabel={text('common.seeAll')}
             onAction={() => goTab('WardrobeTab')}
           />
           {recent.data && recent.data.length > 0 ? (
@@ -96,7 +113,7 @@ export function HomeScreen() {
                 <ItemTile
                   width={124}
                   title={item.name}
-                  subtitle={item.category.toLowerCase()}
+                  subtitle={labels.clothingCategory(item.category)}
                   imageUrl={item.imageUrl}
                   favorite={item.favorite}
                 />
@@ -104,15 +121,19 @@ export function HomeScreen() {
             />
           ) : (
             <AddPrompt
-              title="Add your first piece"
-              subtitle="Snap a photo — we’ll fill in the details"
+              title={text('home.addFirstPiece')}
+              subtitle={text('home.addFirstPieceHint')}
               onPress={() => goTab('WardrobeTab')}
             />
           )}
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Saved looks" actionLabel="Get Ready" onAction={() => goTab('GetReadyTab')} />
+          <SectionHeader
+            title={text('home.savedLooks')}
+            actionLabel={text('home.getReady')}
+            onAction={() => goTab('GetReadyTab')}
+          />
           {looks.data && looks.data.length > 0 ? (
             <FlatList
               horizontal
@@ -121,20 +142,26 @@ export function HomeScreen() {
               showsHorizontalScrollIndicator={false}
               ItemSeparatorComponent={() => <View style={{ width: spacing.md }} />}
               renderItem={({ item }) => (
-                <Card style={styles.lookCard}>
-                  <AppText variant="title" numberOfLines={1}>
-                    {item.title ?? 'Saved look'}
-                  </AppText>
-                  <AppText variant="caption" tone="muted">
-                    {item.items.length} pieces
-                  </AppText>
-                </Card>
+                <Pressable
+                  onPress={() => openLookDetail(item)}
+                  android_ripple={{ color: feedback.ripple }}
+                  style={({ pressed }) => pressed && styles.lookPressed}
+                >
+                  <Card style={styles.lookCard}>
+                    <AppText variant="title" numberOfLines={1}>
+                      {item.title ?? text('home.savedLookFallback')}
+                    </AppText>
+                    <AppText variant="caption" tone="muted">
+                      {tPlural('home.lookPieces', item.items.length)}
+                    </AppText>
+                  </Card>
+                </Pressable>
               )}
             />
           ) : (
             <AddPrompt
-              title="Create your first look"
-              subtitle="Tell us the occasion — we’ll style it"
+              title={text('home.createFirstLook')}
+              subtitle={text('home.createFirstLookHint')}
               onPress={() => goTab('GetReadyTab')}
             />
           )}
@@ -176,10 +203,6 @@ function AddPrompt({
   );
 }
 
-function greeting(): string {
-  return 'YOUR CLOSET';
-}
-
 const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
   nameRow: {
@@ -194,6 +217,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md },
   section: { marginTop: spacing.xxl },
   lookCard: { width: 180, gap: spacing.xs },
+  lookPressed: { transform: [{ scale: feedback.pressScaleCard }] },
 
   addCard: {
     flexDirection: 'row',

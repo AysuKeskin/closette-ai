@@ -2,7 +2,9 @@ import axios, { AxiosError, AxiosHeaders } from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+import { translate } from '../i18n';
 import { useAuth } from '../store/auth';
+import { currentLanguage } from '../store/locale';
 import type { ApiEnvelope, AuthResult } from './types';
 
 /**
@@ -26,14 +28,17 @@ export const api = axios.create({
   timeout: 30000,
 });
 
-// Attach the access token to every request.
+// Attach the access token and the user's language to every request. The backend
+// answers in that language: its error messages and the AI's prose come back
+// ready to display, so the app never translates server text itself.
 api.interceptors.request.use((config) => {
+  const headers = AxiosHeaders.from(config.headers);
   const token = useAuth.getState().accessToken;
   if (token) {
-    const headers = AxiosHeaders.from(config.headers);
     headers.set('Authorization', `Bearer ${token}`);
-    config.headers = headers;
   }
+  headers.set('Accept-Language', currentLanguage());
+  config.headers = headers;
   return config;
 });
 
@@ -89,7 +94,10 @@ api.interceptors.response.use(
  */
 export function unwrap<T>(envelope: ApiEnvelope<T>): T {
   if (!envelope.success) {
-    throw new ApiError(envelope.error?.code ?? 'INTERNAL', envelope.error?.message ?? 'Request failed');
+    throw new ApiError(
+      envelope.error?.code ?? 'INTERNAL',
+      envelope.error?.message ?? translate(currentLanguage(), 'errors.generic'),
+    );
   }
   return envelope.data as T;
 }
@@ -109,10 +117,13 @@ export function toApiError(err: unknown): ApiError {
   if (axios.isAxiosError(err)) {
     const envelope = err.response?.data as ApiEnvelope<unknown> | undefined;
     if (envelope?.error) return new ApiError(envelope.error.code, envelope.error.message);
-    if (err.code === 'ECONNABORTED') return new ApiError('TIMEOUT', 'The request timed out. Please try again.');
-    return new ApiError('NETWORK', 'Could not reach the server. Check your connection.');
+    const language = currentLanguage();
+    if (err.code === 'ECONNABORTED') {
+      return new ApiError('TIMEOUT', translate(language, 'errors.timeout'));
+    }
+    return new ApiError('NETWORK', translate(language, 'errors.network'));
   }
-  return new ApiError('INTERNAL', 'Something went wrong.');
+  return new ApiError('INTERNAL', translate(currentLanguage(), 'errors.generic'));
 }
 
 /**
@@ -136,6 +147,8 @@ export function toFieldErrors(message: string): Record<string, string> {
   return out;
 }
 
+// Turkish's dotted capital: "içerik" must become "İçerik", not "Içerik".
 function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  const locale = currentLanguage() === 'tr' ? 'tr-TR' : 'en-US';
+  return s.charAt(0).toLocaleUpperCase(locale) + s.slice(1);
 }

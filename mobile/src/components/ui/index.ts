@@ -15,3 +15,6 @@ export { PasswordChecklist, isPasswordStrong } from './PasswordChecklist';
 export { VerifyBanner } from './VerifyBanner';
 export { Icon } from './Icon';
 export type { IconName } from './Icon';
+export { SwipeDeck } from './SwipeDeck';
+export { ActionSheet } from './ActionSheet';
+export type { SheetOption } from './ActionSheet';

@@ -15,6 +15,7 @@ import {
   isPasswordStrong,
 } from '../../components/ui';
 import { useForgotPassword, useResetPassword } from '../../features/auth';
+import { useT } from '../../i18n';
 import { spacing } from '../../theme';
 import type { AuthStackParamList } from '../../navigation/types';
 
@@ -27,6 +28,7 @@ type Errors = {
 };
 
 export function ForgotPasswordScreen() {
+  const { t: text } = useT();
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
   const route = useRoute<RouteProp<AuthStackParamList, 'ForgotPassword'>>();
   const forgot = useForgotPassword();
@@ -44,7 +46,7 @@ export function ForgotPasswordScreen() {
 
   const sendCode = () => {
     const next: Errors = {};
-    if (!email.trim()) next.email = 'Email must not be blank';
+    if (!email.trim()) next.email = text('auth.validation.emailBlank');
     setErrors(next);
     if (next.email) return;
 
@@ -59,11 +61,11 @@ export function ForgotPasswordScreen() {
 
   const doReset = () => {
     const next: Errors = {};
-    if (!/^\d{6}$/.test(code.trim())) next.code = 'Enter the 6-digit code from your email';
-    if (!newPassword) next.newPassword = 'Password must not be blank';
-    else if (!isPasswordStrong(newPassword)) next.newPassword = 'Password does not meet the rules below';
-    if (!confirm) next.confirm = 'Please re-enter your password';
-    else if (newPassword !== confirm) next.confirm = 'Passwords do not match';
+    if (!/^\d{6}$/.test(code.trim())) next.code = text('auth.validation.codeSixDigits');
+    if (!newPassword) next.newPassword = text('auth.validation.passwordBlank');
+    else if (!isPasswordStrong(newPassword)) next.newPassword = text('auth.validation.passwordWeak');
+    if (!confirm) next.confirm = text('auth.validation.confirmRequired');
+    else if (newPassword !== confirm) next.confirm = text('auth.validation.passwordsDontMatch');
     setErrors(next);
     if (next.code || next.newPassword || next.confirm) return;
 
@@ -86,15 +88,19 @@ export function ForgotPasswordScreen() {
   return (
     <Screen scroll>
       <Header
-        title="Reset password"
-        subtitle={step === 'request' ? 'We’ll email you a reset code' : `Enter the code sent to ${email}`}
+        title={text('auth.resetTitle')}
+        subtitle={
+          step === 'request'
+            ? text('auth.resetSubtitleRequest')
+            : text('auth.resetSubtitleCode', { email })
+        }
         onBack={() => navigation.goBack()}
       />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {step === 'request' ? (
           <View style={styles.form}>
             <TextField
-              label="Email"
+              label={text('auth.email')}
               value={email}
               onChangeText={(t) => {
                 setEmail(t);
@@ -103,31 +109,31 @@ export function ForgotPasswordScreen() {
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder={text('auth.emailPlaceholder')}
               error={errors.email}
             />
             {errors.form ? (
               <AppText variant="caption" tone="danger">{`⚠ ${errors.form}`}</AppText>
             ) : null}
-            <Button label="Send reset code" onPress={sendCode} loading={forgot.isPending} />
+            <Button label={text('auth.sendResetCode')} onPress={sendCode} loading={forgot.isPending} />
           </View>
         ) : (
           <View style={styles.form}>
             <TextField
-              label="Verification code"
+              label={text('auth.verificationCode')}
               value={code}
               onChangeText={(t) => {
                 setCode(t.replace(/[^0-9]/g, '').slice(0, 6));
                 clear('code');
               }}
               keyboardType="number-pad"
-              placeholder="123456"
+              placeholder={text('auth.codePlaceholder')}
               maxLength={6}
               error={errors.code}
             />
             <View>
               <TextField
-                label="New password"
+                label={text('auth.newPassword')}
                 value={newPassword}
                 onChangeText={(t) => {
                   setNewPassword(t);
@@ -136,30 +142,30 @@ export function ForgotPasswordScreen() {
                 onFocus={() => setPwFocused(true)}
                 onBlur={() => setPwFocused(false)}
                 secureTextEntry
-                placeholder="Create a strong password"
+                placeholder={text('auth.passwordCreatePlaceholder')}
                 error={errors.newPassword}
               />
               {pwFocused ? <PasswordChecklist password={newPassword} /> : null}
             </View>
             <TextField
-              label="Confirm password"
+              label={text('auth.confirmPassword')}
               value={confirm}
               onChangeText={(t) => {
                 setConfirm(t);
                 clear('confirm');
               }}
               secureTextEntry
-              placeholder="Re-enter your password"
+              placeholder={text('auth.confirmPasswordPlaceholder')}
               error={errors.confirm}
             />
             {errors.form ? (
               <AppText variant="caption" tone="danger">{`⚠ ${errors.form}`}</AppText>
             ) : null}
-            <Button label="Reset password" onPress={doReset} loading={reset.isPending} />
+            <Button label={text('auth.resetPassword')} onPress={doReset} loading={reset.isPending} />
             <View style={styles.resend}>
               <LinkText
-                lead="Didn't get a code? "
-                action={forgot.isPending ? 'Sending…' : 'Send again'}
+                lead={text('auth.didntGetCode')}
+                action={forgot.isPending ? text('auth.sending') : text('auth.sendAgain')}
                 onPress={sendCode}
               />
             </View>
@@ -167,7 +173,7 @@ export function ForgotPasswordScreen() {
         )}
 
         <View style={styles.footer}>
-          <LinkText action="Back to log in" onPress={() => navigation.navigate('Login')} />
+          <LinkText action={text('auth.backToLogin')} onPress={() => navigation.navigate('Login')} />
         </View>
       </KeyboardAvoidingView>
     </Screen>

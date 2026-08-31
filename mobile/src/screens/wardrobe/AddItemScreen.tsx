@@ -5,12 +5,14 @@ import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 
 import { toApiError } from '../../api/client';
+import { useT } from '../../i18n';
 import { AppText, Button, Card, Header, Icon, LoadingState, Screen } from '../../components/ui';
 import { useAnalyzeItem } from '../../features/wardrobe';
 import { colors, radius, spacing } from '../../theme';
 import type { WardrobeStackParamList } from '../../navigation/types';
 
 export function AddItemScreen() {
+  const { t: text } = useT();
   const navigation = useNavigation<NativeStackNavigationProp<WardrobeStackParamList>>();
   const analyze = useAnalyzeItem();
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export function AddItemScreen() {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError('We need permission to access your ' + (mode === 'camera' ? 'camera' : 'photos') + '.');
+      setError(text(mode === 'camera' ? 'item.permissionCamera' : 'item.permissionPhotos'));
       return;
     }
     const result =
@@ -49,7 +51,11 @@ export function AddItemScreen() {
 
   return (
     <Screen scroll>
-      <Header title="Add an item" subtitle="Snap it — we'll fill in the details" onBack={() => navigation.goBack()} />
+      <Header
+        title={text('item.addTitle')}
+        subtitle={text('item.addSubtitle')}
+        onBack={() => navigation.goBack()}
+      />
 
       <Card style={styles.preview} padded={false}>
         {imageUri ? (
@@ -58,18 +64,23 @@ export function AddItemScreen() {
           <View style={styles.placeholder}>
             <Icon name="camera" size={72} />
             <AppText variant="body" tone="secondary" center>
-              Take a photo or choose one from your library
+              {text('item.pickPrompt')}
             </AppText>
           </View>
         )}
       </Card>
 
       {analyze.isPending ? (
-        <LoadingState message="Analyzing your item…" />
+        <LoadingState message={text('item.analyzing')} />
       ) : (
         <View style={styles.actions}>
-          <Button label="Take photo" iconName="camera" onPress={() => pick('camera')} />
-          <Button label="Choose from library" iconName="gallery" variant="secondary" onPress={() => pick('library')} />
+          <Button label={text('item.takePhoto')} iconName="camera" onPress={() => pick('camera')} />
+          <Button
+            label={text('item.chooseFromLibrary')}
+            iconName="gallery"
+            variant="secondary"
+            onPress={() => pick('library')}
+          />
         </View>
       )}
 
@@ -79,7 +90,7 @@ export function AddItemScreen() {
             {`⚠ ${error}`}
           </AppText>
           <Button
-            label="Add manually instead"
+            label={text('item.addManually')}
             variant="ghost"
             style={styles.manual}
             onPress={() =>

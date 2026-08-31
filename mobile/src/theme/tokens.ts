@@ -112,6 +112,7 @@ export const feedback = {
   pressOpacity: 0.9,
   ripple: 'rgba(141, 102, 112, 0.14)', // Android ripple (mauve tint)
   linkHighlight: palette.lightRose, // rose pill behind pressed text links
+  scrim: 'rgba(71, 35, 47, 0.38)', // deep-plum dim behind modals/sheets, on-palette
 };
 
 export const theme = { colors, spacing, radius, typography, shadow, feedback, palette };

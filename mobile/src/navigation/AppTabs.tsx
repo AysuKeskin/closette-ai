@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet } from 'react-native';
 
 import { Icon, IconName } from '../components/ui';
+import { useT, type TranslationKey } from '../i18n';
 import { colors, spacing, typography } from '../theme';
 import { GetReadyScreen } from '../screens/getready/GetReadyScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
@@ -21,15 +22,16 @@ const icons: Record<keyof AppTabParamList, IconName> = {
   ProfileTab: 'profile',
 };
 
-const labels: Record<keyof AppTabParamList, string> = {
-  HomeTab: 'Home',
-  WardrobeTab: 'Wardrobe',
-  GetReadyTab: 'Get Ready',
-  BeautyTab: 'Beauty',
-  ProfileTab: 'Profile',
+const labels: Record<keyof AppTabParamList, TranslationKey> = {
+  HomeTab: 'tabs.home',
+  WardrobeTab: 'tabs.wardrobe',
+  GetReadyTab: 'tabs.getReady',
+  BeautyTab: 'tabs.beauty',
+  ProfileTab: 'tabs.profile',
 };
 
 export function AppTabs() {
+  const { t } = useT();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -41,7 +43,7 @@ export function AppTabs() {
         tabBarIcon: ({ focused }) => (
           <Icon name={icons[route.name as keyof AppTabParamList]} size={28} faded={!focused} />
         ),
-        tabBarLabel: labels[route.name as keyof AppTabParamList],
+        tabBarLabel: t(labels[route.name as keyof AppTabParamList]),
       })}
     >
       <Tab.Screen name="HomeTab" component={HomeStack} />

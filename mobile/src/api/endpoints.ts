@@ -3,12 +3,16 @@ import type {
   AnalyzeResponse,
   AuthResult,
   BeautyAnalyzeResponse,
+  BeautyCategory,
   BeautyItem,
+  BeautyProductCandidate,
   CreateBeautyPayload,
+  UpdateBeautyPayload,
   ClothingCategory,
   GeneratedLook,
   Outfit,
   ShouldIBuyResult,
+  StylePreference,
   User,
   WardrobeItem,
 } from './types';
@@ -62,6 +66,18 @@ export const userApi = {
   async resendVerification(): Promise<void> {
     const { data } = await api.post<Envelope<null>>('/api/users/me/email/resend', {});
     unwrap(data);
+  },
+  async deleteAccount(): Promise<void> {
+    const { data } = await api.delete<Envelope<null>>('/api/users/me');
+    unwrap(data);
+  },
+  async getStylePreferences(): Promise<StylePreference> {
+    const { data } = await api.get<Envelope<StylePreference>>('/api/users/me/style-preferences');
+    return unwrap(data);
+  },
+  async updateStylePreferences(payload: Partial<StylePreference>): Promise<StylePreference> {
+    const { data } = await api.put<Envelope<StylePreference>>('/api/users/me/style-preferences', payload);
+    return unwrap(data);
   },
 };
 
@@ -129,6 +145,11 @@ export const wardrobeApi = {
 };
 
 // ---- Beauty ----
+export type BeautyQuery = {
+  category?: BeautyCategory;
+  favorite?: boolean;
+};
+
 export const beautyApi = {
   async analyze(fileUri: string, mimeType: string, name: string): Promise<BeautyAnalyzeResponse> {
     const form = new FormData();
@@ -142,14 +163,47 @@ export const beautyApi = {
     const { data } = await api.post<Envelope<BeautyItem>>('/api/beauty/items', payload);
     return unwrap(data);
   },
-  async list(category?: string): Promise<BeautyItem[]> {
-    const { data } = await api.get<Envelope<BeautyItem[]>>('/api/beauty/items', {
-      params: category ? { category } : {},
-    });
+  async list(query: BeautyQuery = {}): Promise<BeautyItem[]> {
+    const { data } = await api.get<Envelope<BeautyItem[]>>('/api/beauty/items', { params: query });
+    return unwrap(data);
+  },
+  async toggleFavorite(id: string): Promise<BeautyItem> {
+    const { data } = await api.patch<Envelope<BeautyItem>>(`/api/beauty/items/${id}/favorite`);
+    return unwrap(data);
+  },
+  async update(id: string, payload: UpdateBeautyPayload): Promise<BeautyItem> {
+    const { data } = await api.put<Envelope<BeautyItem>>(`/api/beauty/items/${id}`, payload);
     return unwrap(data);
   },
   async remove(id: string): Promise<void> {
     await api.delete(`/api/beauty/items/${id}`);
+  },
+  async scanIngredients(fileUri: string, mimeType: string, name: string): Promise<string[]> {
+    const form = new FormData();
+    form.append('file', { uri: fileUri, name, type: mimeType } as unknown as Blob);
+    const { data } = await api.post<Envelope<string[]>>('/api/beauty/ingredients/scan', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return unwrap(data);
+  },
+  async lookup(barcode: string): Promise<BeautyProductCandidate | null> {
+    const { data } = await api.get<Envelope<BeautyProductCandidate | null>>('/api/beauty/lookup', {
+      params: { barcode },
+    });
+    return unwrap(data);
+  },
+  async search(q: string): Promise<BeautyProductCandidate[]> {
+    const { data } = await api.get<Envelope<BeautyProductCandidate[]>>('/api/beauty/search', {
+      params: { q },
+    });
+    return unwrap(data);
+  },
+  async explainIngredient(name: string): Promise<{ name: string; explanation: string }> {
+    const { data } = await api.get<Envelope<{ name: string; explanation: string }>>(
+      '/api/beauty/ingredients/explain',
+      { params: { name } },
+    );
+    return unwrap(data);
   },
 };
 
@@ -163,20 +217,33 @@ export const outfitApi = {
     const { data } = await api.get<Envelope<Outfit[]>>('/api/outfits');
     return unwrap(data);
   },
-  async save(payload: { title: string; occasion?: string; itemIds: string[] }): Promise<Outfit> {
+  async save(payload: {
+    title: string;
+    occasion?: string;
+    rationale?: string;
+    itemIds: string[];
+  }): Promise<Outfit> {
     const { data } = await api.post<Envelope<Outfit>>('/api/outfits', { ...payload, status: 'SAVED' });
     return unwrap(data);
+  },
+  async remove(id: string): Promise<void> {
+    const { data } = await api.delete<Envelope<null>>(`/api/outfits/${id}`);
+    unwrap(data);
   },
 };
 
 // ---- Should I Buy ----
 export const recommendationApi = {
-  async shouldIBuy(input: {
-    category?: ClothingCategory;
-    colors?: string[];
-    styles?: string[];
-  }): Promise<ShouldIBuyResult> {
-    const { data } = await api.post<Envelope<ShouldIBuyResult>>('/api/recommendations/should-i-buy', input);
+  async describe(description: string): Promise<ShouldIBuyResult> {
+    const { data } = await api.post<Envelope<ShouldIBuyResult>>('/api/recommendations/should-i-buy', { description });
+    return unwrap(data);
+  },
+  async fromPhoto(fileUri: string, mimeType: string, name: string): Promise<ShouldIBuyResult> {
+    const form = new FormData();
+    form.append('file', { uri: fileUri, name, type: mimeType } as unknown as Blob);
+    const { data } = await api.post<Envelope<ShouldIBuyResult>>('/api/recommendations/should-i-buy/photo', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return unwrap(data);
   },
 };

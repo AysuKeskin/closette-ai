@@ -22,6 +22,15 @@ export type AuthResult = {
   user: User;
 };
 
+export type StylePreference = {
+  favoriteColors: string[];
+  preferredStyles: string[];
+  colorSeason: string | null;
+  lovedAesthetics: string[];
+  dressUp: string | null;
+  onboardingCompleted: boolean;
+};
+
 export const CLOTHING_CATEGORIES = [
   'TOPS',
   'BOTTOMS',
@@ -114,6 +123,15 @@ export type BeautyAnalyzeResponse = {
   analysis: BeautyAnalysis;
 };
 
+export type BeautyProductCandidate = {
+  barcode: string | null;
+  productName: string;
+  brand: string | null;
+  category: BeautyCategory;
+  ingredients: string[];
+  imageUrl: string | null;
+};
+
 export type CreateBeautyPayload = {
   brand?: string;
   productName: string;
@@ -121,6 +139,16 @@ export type CreateBeautyPayload = {
   size?: string;
   ingredients?: string[];
   imageKey?: string;
+  imageUrl?: string;
+  favorite?: boolean;
+};
+
+export type UpdateBeautyPayload = {
+  brand?: string;
+  productName?: string;
+  category?: BeautyCategory;
+  size?: string;
+  ingredients?: string[];
   favorite?: boolean;
 };
 
@@ -134,6 +162,7 @@ export type Outfit = {
   id: string;
   title: string | null;
   occasion: string | null;
+  rationale: string | null;
   status: 'SAVED' | 'WORN';
   favorite: boolean;
   items: WardrobeItem[];
@@ -149,4 +178,8 @@ export type ShouldIBuyResult = {
   similarItemCount: number;
   similarItems: WardrobeItem[];
   explanation: string;
+  detectedLabel: string | null;
+  detectedColors: string[];
+  detectedStyles: string[];
+  understood: boolean;
 };

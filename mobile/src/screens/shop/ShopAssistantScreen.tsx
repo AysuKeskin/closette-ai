@@ -1,133 +1,216 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, View } from 'react-native';
 
 import { toApiError } from '../../api/client';
 import {
   AppText,
   Button,
   Card,
-  Chip,
   Header,
+  Icon,
   ItemTile,
   LoadingState,
   Screen,
   TextField,
   VerifyBanner,
 } from '../../components/ui';
-import { BuyVerdict, CLOTHING_CATEGORIES, ClothingCategory, ShouldIBuyResult } from '../../api/types';
-import { useShouldIBuy } from '../../features/recommendation';
+import { BuyVerdict, ShouldIBuyResult } from '../../api/types';
+import { useShouldIBuy, useShouldIBuyPhoto } from '../../features/recommendation';
 import { openVerifyEmail } from '../../navigation/navigationRef';
-import { colors, radius, spacing } from '../../theme';
+import { useT, type TranslationKey } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
+import { colors, feedback, radius, spacing } from '../../theme';
 import type { HomeStackParamList } from '../../navigation/types';
 
-function titleCase(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase();
-}
-
-const VERDICTS: Record<BuyVerdict, { label: string; bg: string; fg: string }> = {
-  buy: { label: '✓ Worth it', bg: '#E4F0E8', fg: colors.success },
-  maybe: { label: 'Your call', bg: '#FBEBCF', fg: colors.warning },
-  skip: { label: 'Skip it', bg: '#F7E2E2', fg: colors.danger },
+// `tone` is a theme colour; the tints are derived from it with alpha, nothing off-palette.
+const VERDICTS: Record<BuyVerdict, { label: TranslationKey; sub: TranslationKey; tone: string }> = {
+  buy: { label: 'shop.verdict.buyLabel', sub: 'shop.verdict.buySub', tone: colors.success },
+  maybe: { label: 'shop.verdict.maybeLabel', sub: 'shop.verdict.maybeSub', tone: colors.warning },
+  skip: { label: 'shop.verdict.skipLabel', sub: 'shop.verdict.skipSub', tone: colors.danger },
 };
 
 export function ShopAssistantScreen() {
+  const { t: copy } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
-  const check = useShouldIBuy();
-  const [category, setCategory] = useState<ClothingCategory | undefined>();
-  const [colors_, setColors] = useState('');
-  const [styles_, setStyles] = useState('');
+  const describe = useShouldIBuy();
+  const fromPhoto = useShouldIBuyPhoto();
+  const [text, setText] = useState('');
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const [result, setResult] = useState<ShouldIBuyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsVerify, setNeedsVerify] = useState(false);
 
-  const run = () => {
+  const pending = describe.isPending || fromPhoto.isPending;
+
+  const onResult = (data: ShouldIBuyResult) => setResult(data);
+  const onError = (err: unknown) => {
+    const api = toApiError(err);
+    if (api.code === 'EMAIL_NOT_VERIFIED') setNeedsVerify(true);
+    else setError(api.message);
+  };
+  const reset = () => {
     setError(null);
     setNeedsVerify(false);
-    check.mutate(
-      {
-        category,
-        colors: splitList(colors_),
-        styles: splitList(styles_),
-      },
-      {
-        onSuccess: (data) => setResult(data),
-        onError: (err) => {
-          const api = toApiError(err);
-          if (api.code === 'EMAIL_NOT_VERIFIED') {
-            setNeedsVerify(true);
-          } else {
-            setError(api.message);
-          }
-        },
-      },
+    setResult(null);
+  };
+
+  const runText = () => {
+    const value = text.trim();
+    if (!value) return;
+    reset();
+    setImageUri(null);
+    describe.mutate(value, { onSuccess: onResult, onError });
+  };
+
+  const runPhoto = async (mode: 'camera' | 'library') => {
+    reset();
+    const perm =
+      mode === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setError(`We need permission to access your ${mode === 'camera' ? 'camera' : 'photos'}.`);
+      return;
+    }
+    const picked =
+      mode === 'camera'
+        ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+        : await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ['images'] });
+    if (picked.canceled || !picked.assets?.[0]) return;
+    const asset = picked.assets[0];
+    setText('');
+    setImageUri(asset.uri);
+    fromPhoto.mutate(
+      { uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg', name: asset.fileName ?? 'item.jpg' },
+      { onSuccess: onResult, onError },
     );
   };
 
+  const verdict = result ? VERDICTS[result.verdict] : null;
+
   return (
-    <Screen scroll footer={<Button label="Check my wardrobe" iconName="shop" onPress={run} loading={check.isPending} />}>
+    <Screen scroll>
       <Header
-        title="Should I buy this?"
-        subtitle="See how it fits with what you already own"
+        title={copy('shop.title')}
+        subtitle={copy('shop.subtitle')}
         onBack={() => navigation.goBack()}
+        stackedBack
       />
 
-      <View style={styles.form}>
-        <View>
-          <AppText variant="label" tone="secondary" style={styles.label}>
-            Category
-          </AppText>
-          <View style={styles.chips}>
-            {CLOTHING_CATEGORIES.map((c) => (
-              <Chip key={c} label={titleCase(c)} selected={category === c} onPress={() => setCategory(c)} />
-            ))}
-          </View>
-        </View>
-        <TextField label="Colors" value={colors_} onChangeText={setColors} placeholder="black, beige" hint="Separate with commas" />
-        <TextField label="Styles" value={styles_} onChangeText={setStyles} placeholder="minimal, classic" hint="Separate with commas" />
+      <TextField
+        placeholder={copy('shop.placeholder')}
+        value={text}
+        onChangeText={setText}
+        multiline
+        style={styles.input}
+        onSubmitEditing={runText}
+      />
+
+      <Button
+        label={copy('shop.check')}
+        iconName="shop"
+        onPress={runText}
+        loading={describe.isPending}
+        style={styles.cta}
+      />
+
+      <View style={styles.orRow}>
+        <View style={styles.rule} />
+        <AppText variant="caption" tone="muted">
+          {copy('shop.orUsePhoto')}
+        </AppText>
+        <View style={styles.rule} />
       </View>
 
-      {check.isPending ? <LoadingState message="Comparing with your wardrobe…" /> : null}
+      <View style={styles.photoRow}>
+        <Button
+          label={copy('shop.takePhoto')}
+          iconName="camera"
+          variant="secondary"
+          onPress={() => runPhoto('camera')}
+          fullWidth={false}
+          style={styles.photoBtn}
+        />
+        <Button
+          label={copy('shop.fromLibrary')}
+          iconName="gallery"
+          variant="ghost"
+          onPress={() => runPhoto('library')}
+          fullWidth={false}
+          style={styles.photoBtn}
+        />
+      </View>
+
+      {imageUri && pending ? (
+        <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
+      ) : null}
+
+      {pending ? <LoadingState message={copy('shop.reading')} /> : null}
 
       {needsVerify ? (
-        <View style={styles.errorCard}>
-          <VerifyBanner
-            onPress={openVerifyEmail}
-            message="The shopping assistant needs a verified email. Tap to verify."
-          />
+        <View style={styles.block}>
+          <VerifyBanner onPress={openVerifyEmail} message={copy('shop.verifyNeeded')} />
         </View>
       ) : null}
 
       {error ? (
-        <Card style={styles.errorCard}>
+        <Card style={styles.block}>
           <AppText variant="label" tone="danger">{`⚠ ${error}`}</AppText>
         </Card>
       ) : null}
 
-      {result && !check.isPending ? (
-        <Card style={styles.result}>
-          <View style={styles.scoreRow}>
-            <AppText variant="display" tone="brand">
-              {result.matchScore}%
-            </AppText>
-            <AppText variant="label" tone="secondary" style={styles.scoreLabel}>
-              wardrobe match
-            </AppText>
-            <View style={[styles.verdict, { backgroundColor: VERDICTS[result.verdict].bg }]}>
-              <AppText variant="label" style={{ color: VERDICTS[result.verdict].fg, fontWeight: '700' }}>
-                {VERDICTS[result.verdict].label}
+      {result && !result.understood && !pending ? (
+        <Card style={styles.block}>
+          <AppText variant="title">{copy('shop.unreadableTitle')}</AppText>
+          <AppText variant="body" tone="secondary" style={styles.explanation}>
+            {result.explanation}
+          </AppText>
+        </Card>
+      ) : null}
+
+      {result && result.understood && verdict && !pending ? (
+        <View style={styles.block}>
+          {result.detectedLabel ? (
+            <View style={styles.understood}>
+              <Icon name="ai-magic" size={18} />
+              <AppText variant="label" tone="secondary" style={styles.understoodText}>
+                {copy('shop.gotIt', { label: result.detectedLabel })}
+              </AppText>
+            </View>
+          ) : null}
+
+          {/* Verdict hero — the answer leads, with the fit score beside it. */}
+          <View style={[styles.hero, { backgroundColor: verdict.tone + '14', borderColor: verdict.tone + '3D' }]}>
+            <View style={styles.heroText}>
+              <AppText variant="h1" style={{ color: verdict.tone }}>
+                {copy(verdict.label)}
+              </AppText>
+              <AppText variant="caption" tone="muted">
+                {copy(verdict.sub)}
+              </AppText>
+            </View>
+            <View style={styles.fitBox}>
+              <AppText variant="h2" style={{ color: verdict.tone }}>
+                {result.matchScore}%
+              </AppText>
+              <AppText variant="caption" tone="muted">
+                {copy('shop.wardrobeMatch')}
               </AppText>
             </View>
           </View>
+
           <AppText variant="body" style={styles.explanation}>
             {result.explanation}
           </AppText>
 
           {result.similarItems.length > 0 ? (
-            <View>
+            <View style={styles.similar}>
               <AppText variant="label" tone="secondary" style={styles.similarTitle}>
-                Similar items you own
+                {copy('shop.similarTitle')}
               </AppText>
               <FlatList
                 horizontal
@@ -136,33 +219,50 @@ export function ShopAssistantScreen() {
                 showsHorizontalScrollIndicator={false}
                 ItemSeparatorComponent={() => <View style={{ width: spacing.md }} />}
                 renderItem={({ item }) => (
-                  <ItemTile width={110} title={item.name} subtitle={item.category.toLowerCase()} imageUrl={item.imageUrl} />
+                  <ItemTile
+                    width={110}
+                    title={item.name}
+                    subtitle={labels.clothingCategory(item.category)}
+                    imageUrl={item.imageUrl}
+                  />
                 )}
               />
             </View>
           ) : null}
-        </Card>
+        </View>
       ) : null}
     </Screen>
   );
 }
 
-function splitList(value: string): string[] {
-  return value
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 const styles = StyleSheet.create({
-  form: { gap: spacing.lg, marginTop: spacing.md },
-  label: { marginLeft: spacing.xs, marginBottom: spacing.sm },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  errorCard: { marginTop: spacing.lg },
-  result: { marginTop: spacing.xl, gap: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  verdict: { marginLeft: 'auto', paddingVertical: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.pill },
-  scoreLabel: { marginBottom: spacing.xs },
-  explanation: { lineHeight: 22 },
+  input: { minHeight: 76, paddingTop: spacing.md, textAlignVertical: 'top', marginTop: spacing.md },
+  cta: { marginTop: spacing.lg },
+
+  orRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginVertical: spacing.xl },
+  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  photoRow: { flexDirection: 'row', gap: spacing.md },
+  photoBtn: { flex: 1 },
+  preview: { width: '100%', height: 200, borderRadius: radius.lg, marginTop: spacing.lg },
+
+  block: { marginTop: spacing.xl },
+
+  understood: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  understoodText: { flex: 1 },
+
+  hero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  heroText: { flex: 1, gap: 2 },
+  fitBox: { alignItems: 'center' },
+
+  explanation: { lineHeight: 22, marginTop: spacing.lg },
+
+  similar: { marginTop: spacing.xl },
   similarTitle: { marginBottom: spacing.sm },
 });
