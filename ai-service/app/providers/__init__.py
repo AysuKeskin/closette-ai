@@ -28,14 +28,20 @@ class _Resilient(AIProvider):
     def analyze_beauty(self, image, filename):
         return self._call("analyze_beauty", image, filename)
 
-    def explain_ingredient(self, name):
-        return self._call("explain_ingredient", name)
+    def parse_clothing(self, description):
+        return self._call("parse_clothing", description)
 
-    def generate_outfit(self, occasion, items, preferences):
-        return self._call("generate_outfit", occasion, items, preferences)
+    def extract_ingredients(self, image, filename):
+        return self._call("extract_ingredients", image, filename)
 
-    def buy_advice(self, candidate, matches, scores):
-        return self._call("buy_advice", candidate, matches, scores)
+    def explain_ingredient(self, name, lang="en"):
+        return self._call("explain_ingredient", name, lang)
+
+    def generate_outfit(self, occasion, items, preferences, lang="en"):
+        return self._call("generate_outfit", occasion, items, preferences, lang)
+
+    def buy_advice(self, candidate, matches, scores, lang="en"):
+        return self._call("buy_advice", candidate, matches, scores, lang)
 
 
 def get_provider() -> AIProvider:

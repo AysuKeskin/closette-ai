@@ -21,13 +21,19 @@ class _Exploding(AIProvider):
     def analyze_beauty(self, image, filename):
         raise RuntimeError("upstream 503")
 
-    def explain_ingredient(self, name):
+    def parse_clothing(self, description):
         raise RuntimeError("upstream 503")
 
-    def generate_outfit(self, occasion, items, preferences):
+    def extract_ingredients(self, image, filename):
         raise RuntimeError("upstream 503")
 
-    def buy_advice(self, candidate, matches, scores):
+    def explain_ingredient(self, name, lang="en"):
+        raise RuntimeError("upstream 503")
+
+    def generate_outfit(self, occasion, items, preferences, lang="en"):
+        raise RuntimeError("upstream 503")
+
+    def buy_advice(self, candidate, matches, scores, lang="en"):
         raise RuntimeError("upstream 503")
 
 
@@ -49,6 +55,32 @@ def test_mock_confidence_is_a_probability():
 
     assert 0.0 <= analysis.confidence <= 1.0
     assert analysis.seasons and analysis.styles
+
+
+def test_mock_parses_clothing_text_into_attributes():
+    parsed = MockProvider().parse_clothing("a beige oversized blazer, very minimal")
+
+    assert parsed.category == "outerwear"
+    assert parsed.subcategory == "blazer"
+    assert "beige" in parsed.colors
+    assert "minimal" in parsed.styles and "oversized" in parsed.styles
+
+
+def test_mock_extracts_a_stable_ingredient_list():
+    image = jpeg_bytes()
+    first = MockProvider().extract_ingredients(image, "a.jpg")
+
+    assert len(first) == 4
+    assert all(isinstance(x, str) and x for x in first)
+    assert first == MockProvider().extract_ingredients(image, "b.jpg")
+
+
+def test_mock_parse_clothing_is_deterministic_and_safe_when_empty():
+    provider = MockProvider()
+    assert provider.parse_clothing("navy pleated skirt") == provider.parse_clothing("navy pleated skirt")
+
+    empty = provider.parse_clothing("")
+    assert empty.category and empty.colors == [] and empty.styles == []
 
 
 def test_known_ingredient_is_explained():
@@ -159,7 +191,7 @@ def test_resilient_provider_prefers_the_primary_when_it_works():
     marker = IngredientExplanation(name="Retinol", explanation="from the real model")
 
     class _Working(_Exploding):
-        def explain_ingredient(self, name):
+        def explain_ingredient(self, name, lang="en"):
             return marker
 
     assert _Resilient(_Working(), MockProvider()).explain_ingredient("Retinol") is marker

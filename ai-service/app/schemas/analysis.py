@@ -27,6 +27,18 @@ class ClothingAnalysis(BaseModel):
     confidence: float = 0.6
 
 
+class ClothingTextRequest(BaseModel):
+    """A free-text description of a garment to parse into structured attributes."""
+
+    description: str
+
+
+class IngredientsResponse(BaseModel):
+    """Ingredients read (OCR) from a photo of a product's ingredient list."""
+
+    ingredients: list[str] = Field(default_factory=list)
+
+
 class BeautyAnalysis(BaseModel):
     brand: str
     product_name: str = Field(alias="productName")
@@ -38,6 +50,7 @@ class BeautyAnalysis(BaseModel):
 
 class IngredientRequest(BaseModel):
     name: str
+    lang: str = "en"
 
 
 class IngredientExplanation(BaseModel):
@@ -69,6 +82,8 @@ class OutfitRequest(BaseModel):
     occasion: str = ""
     items: list[OutfitItemBrief] = Field(default_factory=list)
     preferences: list[str] = Field(default_factory=list)
+    # The language the rationale is written in; attributes stay canonical English.
+    lang: str = "en"
 
 
 class OutfitSuggestion(BaseModel):
@@ -81,6 +96,7 @@ class BuyAdviceRequest(BaseModel):
     candidate: dict = Field(default_factory=dict)
     matches: list[dict] = Field(default_factory=list)   # retrieved similar owned items
     scores: dict = Field(default_factory=dict)          # code-computed compatibility
+    lang: str = "en"
 
 
 class BuyAdviceResponse(BaseModel):

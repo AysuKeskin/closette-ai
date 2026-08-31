@@ -23,6 +23,7 @@ except Exception:  # noqa: BLE001
     pass
 
 from app.core.config import get_settings
+from app.core.language import prompt_instruction
 from app.providers.base import AIProvider
 from app.schemas.analysis import BeautyAnalysis, ClothingAnalysis, IngredientExplanation
 
@@ -50,14 +51,35 @@ _CLOTHING_SYS = (
     "confidence (number 0-1). Do not include colours."
 )
 
+_INGREDIENTS_OCR_SYS = (
+    "You read the INGREDIENTS list printed on a beauty/skincare product from the photo. "
+    "Reply with ONLY a JSON object {\"ingredients\": [...]} where the array holds each ingredient "
+    "as written, in order, one entry per ingredient. Do not translate, do not invent, do not add "
+    "commentary. If no ingredient list is visible, return {\"ingredients\": []}."
+)
+
+_PARSE_SYS = (
+    "You parse a shopper's free-text description of ONE clothing item into JSON. Reply with "
+    "ONLY a JSON object, no prose, with keys: "
+    "category (one of: top, bottom, dress, outerwear, shoes, bag, accessory, jewelry), "
+    "subcategory (short free text, e.g. 'oversized blazer'), "
+    "colors (array of colour words mentioned, lowercase, e.g. ['beige']), "
+    "styles (array of 1-3 style words, e.g. minimal, feminine, edgy), "
+    "confidence (number 0-1). Infer sensibly from the words; use [] when unsure. "
+    "If the text does NOT describe a clothing/fashion item (gibberish, a food, a question, etc.), "
+    "return category \"unknown\", empty colors and styles, and confidence 0 — do NOT guess."
+)
+
 _STYLIST_SYS = (
     "You are a personal stylist. You are given an occasion and the user's OWNED wardrobe "
     "items (each with an id). Compose ONE complete, cohesive outfit using ONLY these items — "
     "never invent items or ids. Rules: pick at most one top AND one bottom, OR a single dress "
     "(a dress replaces top+bottom); then optionally add one each of shoes, outerwear, bag, "
     "jewelry, accessory IF they suit the occasion and colours harmonise. Prefer items matching "
-    "the stated style preferences and the season/formality of the occasion. Reply with ONLY a "
-    "JSON object: {\"itemIds\": [ids in wear order], \"title\": short catchy name, "
+    "the stated style preferences and the season/formality of the occasion. If the occasion is "
+    "unclear, gibberish, or not a real occasion, return an EMPTY itemIds array and a rationale that "
+    "says you didn't understand and asks for a clearer occasion — do NOT pick random items. Reply "
+    "with ONLY a JSON object: {\"itemIds\": [ids in wear order], \"title\": short catchy name, "
     "\"rationale\": one or two sentences on why this works for the occasion}."
 )
 
@@ -120,15 +142,43 @@ class OpenAICompatibleVLM(AIProvider):
             confidence=_as_float(data.get("confidence"), 0.8),
         )
 
-    def explain_ingredient(self, name: str) -> IngredientExplanation:
+    def extract_ingredients(self, image: bytes, filename: str) -> list[str]:
+        data = self._vision_json(_INGREDIENTS_OCR_SYS, "Read the ingredient list.", image, filename)
+        items = data.get("ingredients", [])
+        return [str(x).strip() for x in items if str(x).strip()][:60]
+
+    def parse_clothing(self, description: str) -> ClothingAnalysis:
+        content = self._chat(
+            [
+                {"role": "system", "content": _PARSE_SYS},
+                {"role": "user", "content": description},
+            ],
+            json_mode=True,
+        )
+        data = _extract_json(content)
+        return ClothingAnalysis(
+            category=str(data.get("category", "unknown")).lower(),  # no guess when absent
+            subcategory=str(data.get("subcategory", "")),
+            colors=[str(c).lower() for c in data.get("colors", []) if c][:4],
+            pattern=str(data.get("pattern", "")),
+            styles=[str(x).lower() for x in data.get("styles", []) if x][:3],
+            confidence=_as_float(data.get("confidence"), 0.6),
+        )
+
+    def explain_ingredient(self, name: str, lang: str = "en") -> IngredientExplanation:
         content = self._chat([
-            {"role": "system", "content": "You explain cosmetic ingredients in one friendly, "
-                                          "non-medical sentence for a beauty app."},
-            {"role": "user", "content": f"Explain the skincare/cosmetic ingredient: {name}"},
+            {"role": "system", "content": (
+                "You explain a cosmetic/skincare ingredient in ONE friendly, non-medical sentence "
+                "for a beauty app. Always answer with a definition of the given term. Never ask the "
+                "user for input, never greet, never apologise. If the term is unfamiliar, say it is a "
+                "cosmetic ingredient used in formulations. Output only the sentence. "
+                + prompt_instruction(lang))},
+            {"role": "user", "content": f"Define this cosmetic ingredient: {name}"},
         ])
         return IngredientExplanation(name=name, explanation=content.strip())
 
-    def generate_outfit(self, occasion: str, items: list[dict], preferences: list[str]) -> dict:
+    def generate_outfit(self, occasion: str, items: list[dict], preferences: list[str],
+                        lang: str = "en") -> dict:
         context = {
             "occasion": occasion,
             "preferences": preferences or [],
@@ -136,7 +186,7 @@ class OpenAICompatibleVLM(AIProvider):
         }
         content = self._chat(
             [
-                {"role": "system", "content": _STYLIST_SYS},
+                {"role": "system", "content": _STYLIST_SYS + " " + prompt_instruction(lang)},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
             json_mode=True,
@@ -149,11 +199,12 @@ class OpenAICompatibleVLM(AIProvider):
             "rationale": str(data.get("rationale") or ""),
         }
 
-    def buy_advice(self, candidate: dict, matches: list[dict], scores: dict) -> dict:
+    def buy_advice(self, candidate: dict, matches: list[dict], scores: dict,
+                   lang: str = "en") -> dict:
         context = {"candidate": candidate, "ownedSimilar": matches, "scores": scores}
         content = self._chat(
             [
-                {"role": "system", "content": _BUY_SYS},
+                {"role": "system", "content": _BUY_SYS + " " + prompt_instruction(lang)},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
             json_mode=True,
