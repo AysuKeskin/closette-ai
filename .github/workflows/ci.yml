@@ -134,7 +134,10 @@ jobs:
       # backend → AI-service hop, all through the compose file we ship.
       - name: start the stack
         run: |
-          cp .env.example .env
+          # The app refuses the shipped placeholder on purpose, so the run mints a
+          # throwaway secret instead of the repo carrying one that works.
+          grep -v '^JWT_SECRET=' .env.example > .env
+          echo "JWT_SECRET=$(openssl rand -hex 48)" >> .env
           # -f docker-compose.yml skips the dev override, so CI runs the same
           # topology as production: the AI service has no published port.
           docker compose -f docker-compose.yml --profile app up -d --build
