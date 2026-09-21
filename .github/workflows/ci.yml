@@ -180,7 +180,7 @@ jobs:
       # Build once into the local docker so Trivy can scan it before anything is
       # published. The layer cache is saved so the push step reuses it.
       - name: build image for scan (local, not pushed)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./${{ matrix.component }}
           load: true
@@ -212,7 +212,7 @@ jobs:
       - name: push scanned image to GHCR
         id: push
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./${{ matrix.component }}
           push: true
