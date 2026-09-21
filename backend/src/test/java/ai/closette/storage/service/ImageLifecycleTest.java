@@ -137,6 +137,20 @@ class ImageLifecycleTest {
     }
 
     @Test
+    void anUploadFinishingAfterAccountDeletionRecreatesItsCleanupJob() {
+        var user = TestData.newUser(auth);
+        String key = user + "/" + UUID.randomUUID() + ".jpg";
+        registry.prepare(user, "wardrobe", key);
+        users.deleteAccount(user);
+        cleanup.clean();
+        assertThat(images.existsByBucketAndObjectKey("wardrobe", key)).isFalse();
+        assertThat(registry.uploaded(user, "wardrobe", key)).isFalse();
+        assertThat(tracked(key).getDeleteAfter()).isBeforeOrEqualTo(Instant.now());
+        cleanup.clean();
+        assertThat(images.existsByBucketAndObjectKey("wardrobe", key)).isFalse();
+    }
+
+    @Test
     void legacyOrphanIsDiscoveredAndCleaned() {
         var user = TestData.newUser(auth);
         String key = user + "/" + UUID.randomUUID() + ".jpg";

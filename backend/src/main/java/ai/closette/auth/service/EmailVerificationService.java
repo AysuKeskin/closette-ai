@@ -98,7 +98,7 @@ public class EmailVerificationService {
 
     /** Re-send a fresh code, subject to a short cooldown. */
     @Transactional
-    public void resend(UUID userId) {
+    public UserResponse resend(UUID userId) {
         User user = requireUser(userId);
         if (user.isEmailVerified()) {
             throw ApiException.conflict(MessageKeys.AUTH_EMAIL_ALREADY_VERIFIED);
@@ -108,6 +108,7 @@ public class EmailVerificationService {
             throw ApiException.rateLimited(MessageKeys.AUTH_RESEND_COOLDOWN);
         }
         issue(user);
+        return UserResponse.from(user);
     }
 
     private User requireUser(UUID userId) {

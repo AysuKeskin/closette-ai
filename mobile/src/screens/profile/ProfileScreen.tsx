@@ -47,7 +47,7 @@ export function ProfileScreen() {
           onPress: async () => {
             try {
               await userApi.deleteAccount();
-              signOut();
+              await signOut();
             } catch (err) {
               Alert.alert(text('profile.deleteAccountFailed'), toApiError(err).message);
             }
@@ -170,7 +170,9 @@ export function ProfileScreen() {
       scroll
       footer={
         <Pressable
-          onPress={() => signOut()}
+          onPress={() => {
+            void signOut().catch((err) => Alert.alert(text('profile.logOut'), toApiError(err).message));
+          }}
           accessibilityRole="button"
           accessibilityLabel={text('profile.logOut')}
           android_ripple={{ color: feedback.ripple }}

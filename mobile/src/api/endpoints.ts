@@ -63,9 +63,9 @@ export const userApi = {
     const { data } = await api.post<Envelope<User>>('/api/users/me/email/verify', { code });
     return unwrap(data);
   },
-  async resendVerification(): Promise<void> {
-    const { data } = await api.post<Envelope<null>>('/api/users/me/email/resend', {});
-    unwrap(data);
+  async resendVerification(): Promise<User> {
+    const { data } = await api.post<Envelope<User>>('/api/users/me/email/resend', {});
+    return unwrap(data);
   },
   async deleteAccount(): Promise<void> {
     const { data } = await api.delete<Envelope<null>>('/api/users/me');

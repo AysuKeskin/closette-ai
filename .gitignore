@@ -1,6 +1,9 @@
 # ---- General ----
 .env
 .env.local
+.env.production
+.env.production.*
+!.env.production.example
 *.log
 .DS_Store
 *.pid

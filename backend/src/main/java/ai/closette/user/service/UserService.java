@@ -6,15 +6,11 @@ import ai.closette.user.dto.StylePreferenceResponse;
 import ai.closette.user.dto.UpdateProfileRequest;
 import ai.closette.user.dto.UpdateStylePreferenceRequest;
 import ai.closette.user.dto.UserResponse;
-import ai.closette.beauty.model.BeautyItem;
-import ai.closette.beauty.repository.BeautyItemRepository;
 import ai.closette.storage.service.StorageService;
 import ai.closette.user.model.StylePreference;
 import ai.closette.user.model.User;
 import ai.closette.user.repository.StylePreferenceRepository;
 import ai.closette.user.repository.UserRepository;
-import ai.closette.wardrobe.model.WardrobeItem;
-import ai.closette.wardrobe.repository.WardrobeItemRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,18 +21,13 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final StylePreferenceRepository stylePreferenceRepository;
-    private final WardrobeItemRepository wardrobeRepository;
-    private final BeautyItemRepository beautyRepository;
     private final StorageService storage;
     private final ai.closette.auth.service.SessionService sessions;
 
     public UserService(UserRepository userRepository, StylePreferenceRepository stylePreferenceRepository,
-                       WardrobeItemRepository wardrobeRepository, BeautyItemRepository beautyRepository,
                        StorageService storage, ai.closette.auth.service.SessionService sessions) {
         this.userRepository = userRepository;
         this.stylePreferenceRepository = stylePreferenceRepository;
-        this.wardrobeRepository = wardrobeRepository;
-        this.beautyRepository = beautyRepository;
         this.storage = storage;
         this.sessions = sessions;
     }

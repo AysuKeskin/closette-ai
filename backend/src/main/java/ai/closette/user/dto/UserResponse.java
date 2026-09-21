@@ -11,6 +11,12 @@ public record UserResponse(
         String username,
         String displayName,
         boolean emailVerified,
+        // When the code now in the user's inbox stops working. Null once the
+        // account is verified, or if no code is outstanding. The client counts
+        // down to it; only the server knows when the code was actually issued,
+        // so a timer started on the client would be wrong for anyone who comes
+        // back to the screen later.
+        Instant verificationExpiresAt,
         Instant createdAt) {
 
     public static UserResponse from(User user) {
@@ -20,6 +26,7 @@ public record UserResponse(
                 user.getUsername(),
                 user.getDisplayName(),
                 user.isEmailVerified(),
+                user.isEmailVerified() ? null : user.getVerificationExpiresAt(),
                 user.getCreatedAt());
     }
 }

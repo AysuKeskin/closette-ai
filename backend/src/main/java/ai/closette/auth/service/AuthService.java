@@ -10,12 +10,9 @@ import ai.closette.common.exception.ApiException;
 import ai.closette.common.exception.MessageKeys;
 import ai.closette.common.ratelimit.RateLimitBucket;
 import ai.closette.common.ratelimit.RateLimiter;
-import ai.closette.common.exception.ErrorCode;
 import ai.closette.email.EmailSender;
 import ai.closette.user.model.User;
 import ai.closette.user.repository.UserRepository;
-import ai.closette.user.dto.UserResponse;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 
 @Service
 public class AuthService {

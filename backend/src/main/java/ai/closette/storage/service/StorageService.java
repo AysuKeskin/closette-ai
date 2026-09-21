@@ -59,7 +59,12 @@ public class StorageService {
                     .stream(in, bytes.length, -1)
                     .contentType(contentType == null ? "application/octet-stream" : contentType)
                     .build());
+            if (!registry.uploaded(userId, bucket, key)) {
+                throw ApiException.unauthorized(MessageKeys.AUTH_REQUIRED);
+            }
             return key;
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to upload object to bucket {}", bucket, e);
             throw ApiException.storage(MessageKeys.STORAGE_UPLOAD_FAILED);

@@ -13,6 +13,8 @@ export type User = {
   username: string;
   displayName: string | null;
   emailVerified: boolean;
+  /** ISO instant the outstanding verification code stops working; null once verified. */
+  verificationExpiresAt: string | null;
   createdAt: string;
 };
 

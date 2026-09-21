@@ -30,9 +30,9 @@ export async function openLegalPage(url: string): Promise<void> {
   catch { Alert.alert(translate(currentLanguage(), 'consent.linkFailed')); }
 }
 
-export function ensureAiConsent(client: AxiosInstance, epoch: number): Promise<void> {
+export function ensureAiConsent(client: AxiosInstance, epoch: number, approve?: (version: string) => Promise<void>): Promise<void> {
   if (pending?.epoch === epoch) return pending.promise;
-  const current = { epoch, promise: requestConsent(client, epoch) };
+  const current = { epoch, promise: requestConsent(client, epoch, approve) };
   pending = current;
   void current.promise.then(
     () => { if (pending === current) pending = null; },
@@ -41,7 +41,7 @@ export function ensureAiConsent(client: AxiosInstance, epoch: number): Promise<v
   return current.promise;
 }
 
-async function requestConsent(client: AxiosInstance, epoch: number) {
+async function requestConsent(client: AxiosInstance, epoch: number, approve?: (version: string) => Promise<void>) {
   const { data } = await client.get<Disclosure>('/api/privacy');
   if (epoch !== useAuth.getState().sessionEpoch) throw new axios.CanceledError();
   if (!data.requiresConsent || (accepted?.epoch === epoch && accepted.version === data.version)) return;
@@ -60,7 +60,8 @@ async function requestConsent(client: AxiosInstance, epoch: number) {
   });
   if (!choice) throw new axios.CanceledError(t('consent.declined'));
   if (epoch !== useAuth.getState().sessionEpoch) throw new axios.CanceledError();
-  await client.put('/api/users/me/ai-consent', { version: data.version, accepted: true }, {
+  if (approve) await approve(data.version);
+  else await client.put('/api/users/me/ai-consent', { version: data.version, accepted: true }, {
     headers: { Authorization: `Bearer ${useAuth.getState().accessToken}` },
   });
   if (epoch !== useAuth.getState().sessionEpoch) throw new axios.CanceledError();

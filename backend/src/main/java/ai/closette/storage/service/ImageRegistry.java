@@ -37,12 +37,29 @@ public class ImageRegistry {
         images.save(new StoredImage(userId, bucket, key, Instant.now().plus(24, ChronoUnit.HOURS)));
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean uploaded(UUID userId, String bucket, String key) {
+        boolean accountExists = users.lockById(userId).isPresent();
+        // Account deletion can finish while the object-store upload is in flight.
+        // Recreate its cleanup job if the worker already consumed the original one.
+        var image = images.lock(bucket, key).orElseGet(() -> images.save(
+                new StoredImage(userId, bucket, key, Instant.now().plus(24, ChronoUnit.HOURS))));
+        if (!accountExists) image.setDeleteAfter(Instant.now());
+        return accountExists;
+    }
+
     @Transactional
     public void claim(UUID userId, String bucket, String key) {
         if (key == null || key.isBlank()) return;
         requireOwnedKey(userId, key);
         users.lockById(userId).orElseThrow(() -> ApiException.unauthorized(MessageKeys.AUTH_REQUIRED));
-        StoredImage image = images.lock(bucket, key).orElseThrow(ImageRegistry::missing);
+        StoredImage image = images.lock(bucket, key).orElseGet(() -> {
+            // Supports existing installations with custom bucket names; only a
+            // previously owned database reference can adopt an untracked image.
+            var legacy = new StoredImage(userId, bucket, key, null);
+            if (!referenced(legacy)) throw missing();
+            return images.save(legacy);
+        });
         if (!image.getUserId().equals(userId) || (image.getDeleteAfter() != null
                 && !image.getDeleteAfter().isAfter(Instant.now()))) throw missing();
         image.setDeleteAfter(null);
@@ -75,7 +92,11 @@ public class ImageRegistry {
         try { owner = UUID.fromString(key.split("/", 2)[0]); }
         catch (IllegalArgumentException e) { return; }
         if (!isOwnedKey(owner, key)) return;
-        images.save(new StoredImage(owner, bucket, key, Instant.now()));
+        users.lockById(owner);
+        if (images.existsByBucketAndObjectKey(bucket, key)) return;
+        var image = new StoredImage(owner, bucket, key, Instant.now());
+        if (referenced(image)) image.setDeleteAfter(null);
+        images.save(image);
     }
 
     public static boolean isOwnedKey(UUID userId, String key) {

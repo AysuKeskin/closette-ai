@@ -18,7 +18,7 @@ function runtime() {
     'expo-secure-store': {
       getItemAsync: async key => values.get(key) ?? null,
       setItemAsync: async (key, value) => { values.set(key, value); },
-      deleteItemAsync: async key => { values.delete(key); },
+      deleteItemAsync: async key => { if (controls.failStorage) throw new Error('keychain locked'); values.delete(key); },
     },
     'expo-constants': { expoConfig: { extra: { apiBaseUrl: 'https://api.test' } } },
     'react-native': { Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
@@ -53,7 +53,11 @@ function runtime() {
     if (config.url === '/api/auth/logout') controls.logouts++;
     return response(config, {});
   };
-  client.api.defaults.adapter = async config => { controls.aiCalls++; return response(config, { ok: true }); };
+  client.api.defaults.adapter = async config => {
+    if (config.url === '/api/users/me/ai-consent') controls.approvals++;
+    else controls.aiCalls++;
+    return response(config, { ok: true });
+  };
   const session = id => ({ accessToken: 'access-' + id, refreshToken: 'refresh-' + id,
     user: { id, email: id + '@test.io', username: id, emailVerified: true } });
   return { client, auth, queries, controls, prompts, values, clients, response, session };
@@ -117,4 +121,38 @@ test('AI requests wait for permission and changed disclosures require new permis
   r.controls.disclosure = 'v2';
   await r.client.api.post('/api/outfits/generate', {});
   assert.equal(r.controls.approvals, 2); assert.equal(r.prompts.length, 2);
+});
+
+test('production config refuses missing identity and non-public API addresses', () => {
+  const config = require('../app.config.js');
+  const names = ['APP_ENV', 'EAS_BUILD_PROFILE', 'EXPO_PUBLIC_API_BASE_URL', 'IOS_BUNDLE_IDENTIFIER', 'EAS_PROJECT_ID'];
+  const previous = Object.fromEntries(names.map(key => [key, process.env[key]]));
+  try {
+    process.env.APP_ENV = 'production';
+    delete process.env.EXPO_PUBLIC_API_BASE_URL;
+    assert.throws(config, /HTTPS/);
+    process.env.IOS_BUNDLE_IDENTIFIER = 'com.closette.mobile';
+    process.env.EAS_PROJECT_ID = '11111111-2222-3333-4444-555555555555';
+    for (const address of ['http://api.closette.app', 'https://localhost', 'https://10.0.0.2', 'https://api.example.com/api']) {
+      process.env.EXPO_PUBLIC_API_BASE_URL = address;
+      assert.throws(config, /HTTPS/);
+    }
+    process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.closette.app';
+    const built = config();
+    assert.equal(built.extra.apiBaseUrl, 'https://api.closette.app');
+    assert.equal(built.ios.bundleIdentifier, 'com.closette.mobile');
+  } finally {
+    for (const key of names) {
+      if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
+    }
+  }
+});
+
+
+test('keychain deletion failure does not prevent remote logout', async () => {
+  const r = runtime(); await r.auth.getState().setSession(r.session('A'));
+  r.controls.failStorage = true;
+  await assert.rejects(r.auth.getState().signOut(), /keychain locked/);
+  assert.equal(r.controls.logouts, 1);
+  assert.equal(r.auth.getState().status, 'unauthenticated');
 });

@@ -39,8 +39,11 @@ export function useVerifyEmail() {
 }
 
 export function useResendVerification() {
+  const setUser = useAuth((s) => s.setUser);
   return useMutation({
     mutationFn: () => userApi.resendVerification(),
+    // The reply carries the new expiry, so storing it restarts the countdown.
+    onSuccess: (user) => setUser(user),
   });
 }
 

@@ -118,13 +118,17 @@ export const useAuth = create<AuthState>((set, get) => ({
     resetQueryClient();
     set({ sessionEpoch: get().sessionEpoch + 1, status: 'unauthenticated', user: null,
       accessToken: null, refreshToken: null, promptVerify: false });
-    await persist(async () => {
-      await Promise.all([
-        SecureStore.deleteItemAsync(ACCESS_KEY), SecureStore.deleteItemAsync(REFRESH_KEY),
-        SecureStore.deleteItemAsync(USER_KEY),
-      ]);
-    });
-    // Local logout also works offline; the server can only revoke a reachable session.
-    if (refresh) await revokeSession(refresh).catch(() => undefined);
+    // Attempt server revocation even if the device's keychain fails to delete.
+    const revocation = refresh ? revokeSession(refresh).catch(() => undefined) : Promise.resolve();
+    try {
+      await persist(async () => {
+        await Promise.all([
+          SecureStore.deleteItemAsync(ACCESS_KEY), SecureStore.deleteItemAsync(REFRESH_KEY),
+          SecureStore.deleteItemAsync(USER_KEY),
+        ]);
+      });
+    } finally {
+      await revocation;
+    }
   },
 }));

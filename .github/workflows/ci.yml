@@ -97,8 +97,7 @@ jobs:
         working-directory: mobile
         run: npm ci
 
-      # No test runner yet — the type checker is the mobile gate. It also proves
-      # the two dictionaries have the same keys, since `tr` is typed as `en`.
+      # Types also prove the two dictionaries have the same keys.
       - name: typecheck
         working-directory: mobile
         run: npm run typecheck
@@ -108,6 +107,16 @@ jobs:
       - name: i18n check
         working-directory: mobile
         run: npm run check:i18n
+
+      - name: session and consent regression tests
+        working-directory: mobile
+        run: npm run test:security
+
+      - name: dependency security and Expo compatibility
+        working-directory: mobile
+        run: |
+          npm audit --audit-level=moderate
+          npx expo install --check
 
   secret-scan:
     name: secret scan

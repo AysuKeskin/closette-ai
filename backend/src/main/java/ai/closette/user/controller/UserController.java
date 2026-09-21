@@ -65,9 +65,8 @@ public class UserController {
 
     /** Re-send a fresh verification code (rate-limited). */
     @PostMapping("/me/email/resend")
-    public ApiResponse<Void> resendVerification() {
-        emailVerificationService.resend(SecurityUtil.currentUserId());
-        return ApiResponse.ok(null);
+    public ApiResponse<UserResponse> resendVerification() {
+        return ApiResponse.ok(emailVerificationService.resend(SecurityUtil.currentUserId()));
     }
 
     @GetMapping("/me/style-preferences")

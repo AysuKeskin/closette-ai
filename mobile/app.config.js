@@ -3,10 +3,11 @@ const base = require('./app.json').expo;
 function publicHttps(name, value) {
   let url;
   try { url = new URL(value); } catch { throw new Error(`${name} must be a public HTTPS URL`); }
-  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/'
       || ['localhost', '127.0.0.1', '10.0.2.2', '[::1]'].includes(url.hostname)
       || url.hostname.endsWith('.example') || url.hostname.endsWith('.invalid')
-      || url.hostname === 'example.com') throw new Error(`${name} must be a public HTTPS URL`);
+      || url.hostname === 'example.com' || url.hostname.endsWith('.test')
+      || /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(url.hostname)) throw new Error(`${name} must be a public HTTPS URL`);
   return value.replace(/\/$/, '');
 }
 

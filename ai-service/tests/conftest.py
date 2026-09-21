@@ -5,6 +5,7 @@ from app.core.config import get_settings
 # Everything Settings reads from the environment. Cleared before each test so a
 # developer's exported keys can never change what the suite asserts.
 _SETTINGS_ENV = (
+    "APP_ENV",
     "AI_PROVIDER",
     "SEG_PROVIDER",
     "EMBED_PROVIDER",

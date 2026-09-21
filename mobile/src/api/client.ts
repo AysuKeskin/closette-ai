@@ -48,7 +48,9 @@ api.interceptors.request.use(async (config) => {
   if (config._sessionEpoch !== undefined && config._sessionEpoch !== epoch) throw new axios.CanceledError();
   config._sessionEpoch = epoch;
   const isAuth = config.url?.startsWith('/api/auth/');
-  if (!isAuth && needsAiConsent(config)) await ensureAiConsent(bare, epoch);
+  if (!isAuth && needsAiConsent(config)) await ensureAiConsent(bare, epoch, async (version) => {
+    await api.put('/api/users/me/ai-consent', { version, accepted: true });
+  });
   if (useAuth.getState().sessionEpoch !== epoch) throw new axios.CanceledError();
   const headers = AxiosHeaders.from(config.headers);
   const token = useAuth.getState().accessToken;

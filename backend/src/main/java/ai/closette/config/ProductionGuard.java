@@ -50,7 +50,9 @@ public class ProductionGuard {
         required(name, value);
         URI uri = URI.create(value);
         if (!"https".equals(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null
-                || uri.getQuery() != null || uri.getFragment() != null || uri.getHost().equals("localhost"))
+                || uri.getQuery() != null || uri.getFragment() != null || uri.getHost().equals("localhost")
+                || uri.getHost().endsWith(".invalid") || uri.getHost().endsWith(".test")
+                || uri.getHost().matches("^(10\\.|127\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.).*"))
             throw new IllegalStateException(name + " must use a public HTTPS origin");
     }
 }
