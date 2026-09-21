@@ -31,6 +31,7 @@ class ClothingTextRequest(BaseModel):
     """A free-text description of a garment to parse into structured attributes."""
 
     description: str
+    lang: str = "en"
 
 
 class IngredientsResponse(BaseModel):
@@ -82,14 +83,24 @@ class OutfitRequest(BaseModel):
     occasion: str = ""
     items: list[OutfitItemBrief] = Field(default_factory=list)
     preferences: list[str] = Field(default_factory=list)
+    # The look already on screen, so "try another" returns a different one.
+    avoid_item_ids: list[str] = Field(default_factory=list, alias="avoidItemIds")
     # The language the rationale is written in; attributes stay canonical English.
     lang: str = "en"
+
+    model_config = {"populate_by_name": True}
 
 
 class OutfitSuggestion(BaseModel):
     itemIds: list[str] = Field(default_factory=list)
-    title: str = "Your look"
+    # Blank by default: the caller supplies the wording in its own language.
+    title: str = ""
     rationale: str = ""
+    # How dressy the model judged the occasion: casual | smart | formal, and which
+    # season it implies. Classifying free text needs the model; acting on the answer
+    # is the backend's job.
+    formality: str = ""
+    season: str = ""
 
 
 class BuyAdviceRequest(BaseModel):

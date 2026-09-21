@@ -14,6 +14,28 @@ _CATEGORIES = [
     ("bag", "shoulder bag", ["minimal"], ["spring", "summer", "fall", "winter"]),
     ("outerwear", "trench coat", ["classic", "timeless"], ["fall", "spring"]),
 ]
+# The mock's subcategories in both languages: offline, the app has to read the same
+# way it does against a live model, which writes this field in the user's language.
+_SUBCATEGORY_TR = {
+    "mini dress": "mini elbise",
+    "silk blouse": "ipek bluz",
+    "midi skirt": "midi etek",
+    "ankle boots": "bilek bot",
+    "shoulder bag": "omuz çantası",
+    "trench coat": "trençkot",
+}
+
+_CATEGORY_NOUN_TR = {
+    "dress": "elbise", "top": "üst", "bottom": "alt", "outerwear": "dış giyim",
+    "shoes": "ayakkabı", "bag": "çanta", "accessory": "aksesuar", "jewelry": "takı",
+}
+
+
+def _category_noun(category: str, language: str) -> str:
+    """The bare category as a shopper would say it, for a description that named no garment."""
+    return _CATEGORY_NOUN_TR.get(category, category) if language == "tr" else category
+
+
 _COLORS = [["black"], ["white"], ["beige", "cream"], ["burgundy"], ["dusty pink"], ["navy"]]
 _PATTERNS = ["solid", "striped", "floral", "checked"]
 
@@ -141,8 +163,10 @@ class MockProvider(AIProvider):
     """No-credentials provider that returns realistic, deterministic data so the
     whole app works end-to-end during development (Flow A)."""
 
-    def analyze_clothing(self, image: bytes, filename: str) -> ClothingAnalysis:
+    def analyze_clothing(self, image: bytes, filename: str, lang: str = "en") -> ClothingAnalysis:
         category, subcategory, styles, seasons = _CATEGORIES[_index(image, len(_CATEGORIES))]
+        if normalize_lang(lang) == "tr":
+            subcategory = _SUBCATEGORY_TR[subcategory]
         colors = _COLORS[_index(image + b"c", len(_COLORS))]
         pattern = _PATTERNS[_index(image + b"p", len(_PATTERNS))]
         return ClothingAnalysis(
@@ -161,16 +185,19 @@ class MockProvider(AIProvider):
         start = _index(image, len(pool))
         return [pool[(start + i) % len(pool)] for i in range(4)]
 
-    def parse_clothing(self, description: str) -> ClothingAnalysis:
+    def parse_clothing(self, description: str, lang: str = "en") -> ClothingAnalysis:
+        language = normalize_lang(lang)
         text = (description or "").lower()
-        category, subcategory = None, "item"
+        category, subcategory = None, "parça" if language == "tr" else "item"
         # Longest keywords first so "dusty pink"/"t-shirt" win over their substrings.
         for kw in sorted(_TEXT_CATEGORY_ALL, key=len, reverse=True):
             if kw in text:
                 category = _TEXT_CATEGORY_ALL[kw]
-                # A Turkish keyword still yields an English subcategory: this value
-                # is stored on the item and must not depend on the input language.
-                subcategory = kw if kw in _TEXT_CATEGORY else category
+                # Subcategory is the one free-text field the user reads back, so it follows
+                # their language: the keyword they typed when it is already in that language,
+                # the bare category noun otherwise. Every other value stays canonical English.
+                vocabulary = _TEXT_CATEGORY_TR if language == "tr" else _TEXT_CATEGORY
+                subcategory = kw if kw in vocabulary else _category_noun(category, language)
                 break
         colors = [c for c in _TEXT_COLORS if c in text]
         # Normalise "minimalist"→"minimal", "bohemian"→"boho" for consistency with the wardrobe tags.
@@ -214,7 +241,7 @@ class MockProvider(AIProvider):
         return IngredientExplanation(name=name, explanation=explanation)
 
     def generate_outfit(self, occasion: str, items: list[dict], preferences: list[str],
-                        lang: str = "en") -> dict:
+                        lang: str = "en", avoid_item_ids: list[str] | None = None) -> dict:
         # Deterministic rule-based composer (no LLM): a dress, or top + bottom,
         # then complete with one of each supporting category.
         by_cat: dict[str, list[dict]] = {}
@@ -236,6 +263,10 @@ class MockProvider(AIProvider):
         occ = (occasion or "").strip() or _say(lang, "outfit_occasion_fallback")
         return {
             "itemIds": [it["id"] for it in chosen if it.get("id")],
+            # The offline provider does not judge occasions; blank means "unknown",
+            # which the backend treats as "not a formal event".
+            "formality": "",
+            "season": "",
             "title": _say(lang, "outfit_title"),
             "rationale": _say(lang, "outfit_rationale", occasion=occ, count=len(chosen)),
         }

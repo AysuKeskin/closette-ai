@@ -195,3 +195,91 @@ def test_resilient_provider_prefers_the_primary_when_it_works():
             return marker
 
     assert _Resilient(_Working(), MockProvider()).explain_ingredient("Retinol") is marker
+
+
+def test_the_resilient_wrapper_forwards_every_argument(set_env):
+    """Guards a signature drift the rest of the suite cannot see.
+
+    Every other test resolves the provider with AI_PROVIDER=mock, and get_provider
+    returns the mock unwrapped in that case — so _Resilient's own signatures are
+    exercised only in production, where a missing parameter is a 500 on the user's
+    first photo.
+    """
+    from app.providers import _Resilient
+    from app.providers.base import AIProvider
+
+    calls = []
+
+    class Recorder(AIProvider):
+        def analyze_clothing(self, image, filename, lang="en"):
+            calls.append(("analyze_clothing", image, filename, lang))
+            return "ok"
+
+        def analyze_beauty(self, image, filename):
+            calls.append(("analyze_beauty", image, filename))
+            return "ok"
+
+        def extract_ingredients(self, image, filename):
+            calls.append(("extract_ingredients", image, filename))
+            return []
+
+        def parse_clothing(self, description, lang="en"):
+            calls.append(("parse_clothing", description, lang))
+            return "ok"
+
+        def explain_ingredient(self, name, lang="en"):
+            calls.append(("explain_ingredient", name, lang))
+            return "ok"
+
+        def generate_outfit(self, occasion, items, preferences, lang="en", avoid_item_ids=None):
+            calls.append(("generate_outfit", occasion, items, preferences, avoid_item_ids, lang))
+            return {}
+
+        def buy_advice(self, candidate, matches, scores, lang="en"):
+            calls.append(("buy_advice", candidate, matches, scores, lang))
+            return {}
+
+    provider = _Resilient(Recorder(), Recorder())
+
+    provider.analyze_clothing(b"x", "x.jpg", "tr")
+    provider.parse_clothing("lacivert elbise", "tr")
+    provider.explain_ingredient("niacinamide", "tr")
+    provider.generate_outfit("plaj", [], [], "tr", ["x"])
+    provider.buy_advice({}, [], {}, "tr")
+
+    # Every call reached the primary with its language intact.
+    assert all(call[-1] == "tr" for call in calls)
+    assert [call[0] for call in calls] == [
+        "analyze_clothing", "parse_clothing", "explain_ingredient", "generate_outfit", "buy_advice",
+    ]
+
+
+def test_cataloguing_is_deterministic_but_styling_is_not(set_env, monkeypatch):
+    """The stylist ran at temperature 0 like every other call, so the same wardrobe
+    and occasion returned one identical outfit forever. Cataloguing must stay at 0."""
+    set_env(VLM_API_KEY="test-key")
+    from app.providers.vlm_api import OpenAICompatibleVLM
+
+    client = OpenAICompatibleVLM("openai")
+    seen = {}
+
+    def fake_chat(messages, json_mode=False, temperature=0.0):
+        seen[len(seen)] = temperature
+        return '{"itemIds": [], "styles": [], "verdict": "skip"}'
+
+    def fake_vision(system, user, image, filename):
+        seen[len(seen)] = 0.0  # vision goes through _chat's default
+        return {}
+
+    monkeypatch.setattr(client, "_chat", fake_chat)
+    monkeypatch.setattr(client, "_vision_json", fake_vision)
+
+    client.analyze_clothing(b"x", "x.jpg", "en")
+    catalogue_temp = seen[0]
+
+    seen.clear()
+    client.generate_outfit("job interview", [], [], "en")
+    stylist_temp = seen[0]
+
+    assert catalogue_temp == 0.0
+    assert stylist_temp > 0.5, "styling at temperature 0 gives the same look every time"

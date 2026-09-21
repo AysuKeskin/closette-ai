@@ -51,6 +51,14 @@ _MAX_DIM = 160            # downscale for speed; colour doesn't need resolution
 _BG_DELTA = 14.0         # LAB distance under which a pixel counts as "background"
 _MIN_SHARE = 0.06        # ignore colours below 6% of the garment
 
+# Shading, not colour: a shadow lowers a pixel's lightness while leaving it about as
+# neutral as it was, so a cream dress half in shadow used to catalogue as half mauve.
+# A genuinely dark colour is dark AND saturated (navy sits at chroma 20, burgundy 29),
+# which is what keeps a navy-and-white piece from being read as white with shadows.
+_SHADOW_DROP_L = 15.0     # lightness below the garment's own bright end
+_SHADOW_MAX_CHROMA = 12.0 # above this, the pixel is a colour rather than a shadow
+_SHADOW_MAX_SHARE = 0.70  # never read a garment from a highlight alone
+
 
 def _hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
@@ -108,11 +116,39 @@ def _foreground_mask(lab: np.ndarray, alpha: np.ndarray | None) -> np.ndarray:
         lab[:, :frame].reshape(-1, 3), lab[:, -frame:].reshape(-1, 3),
     ])
     bg = np.median(border, axis=0)
+
+    # A border colour only means "backdrop" if the middle of the frame differs from
+    # it. A white shirt shot on a white bed has the same colour at both, and treating
+    # that as background deletes the garment's main colour — the shirt comes back as
+    # nothing but its buttons. When the centre matches the border, keep every pixel.
+    cy, cx = h // 2, w // 2
+    ch, cw = max(1, h // 6), max(1, w // 6)
+    centre = np.median(lab[cy - ch:cy + ch, cx - cw:cx + cw].reshape(-1, 3), axis=0)
+    if np.linalg.norm(centre - bg) <= _BG_DELTA:
+        return np.ones((h, w), dtype=bool)
+
     dist = np.linalg.norm(lab - bg, axis=-1)
     mask = dist > _BG_DELTA
     if mask.mean() < 0.05:  # no clear background (flat-lay / full-frame) → use all
         return np.ones((h, w), dtype=bool)
     return mask
+
+
+def _drop_shadow(pixels: np.ndarray) -> np.ndarray:
+    """Discards shaded pixels so they cannot vote for a colour the garment is not.
+
+    The garment's own 90th-percentile lightness is the reference: measuring against
+    the piece itself is what leaves a black garment alone, since its darkest pixels
+    are not far below its brightest. Everything is kept when the shadow would swallow
+    most of the frame — better an under-lit reading than one taken off a highlight.
+    """
+    lightness = pixels[:, 0]
+    chroma = np.linalg.norm(pixels[:, 1:], axis=1)
+    lit = np.percentile(lightness, 90)
+    shadow = (lightness < lit - _SHADOW_DROP_L) & (chroma < _SHADOW_MAX_CHROMA)
+    if 0 < shadow.mean() <= _SHADOW_MAX_SHARE:
+        return pixels[~shadow]
+    return pixels
 
 
 def extract_colors(image_bytes: bytes, top: int = 3) -> list[dict]:
@@ -126,6 +162,7 @@ def extract_colors(image_bytes: bytes, top: int = 3) -> list[dict]:
     pixels = lab[mask]
     if pixels.size == 0:
         return []
+    pixels = _drop_shadow(pixels)
 
     # Nearest palette colour for every garment pixel (CIE76 ΔE).
     d = np.linalg.norm(pixels[:, None, :] - _PALETTE_LAB[None, :, :], axis=2)

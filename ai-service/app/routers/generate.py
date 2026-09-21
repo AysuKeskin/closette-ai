@@ -15,7 +15,8 @@ router = APIRouter(prefix="/generate", tags=["generate"])
 async def generate_outfit(req: OutfitRequest) -> OutfitSuggestion:
     """Agentic RAG: compose one outfit from the retrieved owned items."""
     items = [i.model_dump() for i in req.items]
-    data = get_provider().generate_outfit(req.occasion, items, req.preferences, req.lang)
+    data = get_provider().generate_outfit(
+        req.occasion, items, req.preferences, req.lang, req.avoid_item_ids)
     return OutfitSuggestion(**data)
 
 

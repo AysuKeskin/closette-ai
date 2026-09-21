@@ -8,7 +8,9 @@ class AIProvider(ABC):
     matter of adding one subclass — nothing else in the system changes (NFR-13)."""
 
     @abstractmethod
-    def analyze_clothing(self, image: bytes, filename: str) -> ClothingAnalysis:
+    def analyze_clothing(self, image: bytes, filename: str, lang: str = "en") -> ClothingAnalysis:
+        """Catalogue a garment from its photo. ``lang`` reaches only the free-text
+        subcategory, which the user reads; every fixed vocabulary stays English."""
         ...
 
     @abstractmethod
@@ -22,7 +24,7 @@ class AIProvider(ABC):
         ...
 
     @abstractmethod
-    def parse_clothing(self, description: str) -> ClothingAnalysis:
+    def parse_clothing(self, description: str, lang: str = "en") -> ClothingAnalysis:
         """Parse a free-text garment description ("a beige oversized blazer") into
         structured attributes. Used by Should-I-Buy's natural-language input, so the
         user never fills a category/colour/style form. No pixels here, so colours
@@ -35,7 +37,7 @@ class AIProvider(ABC):
 
     @abstractmethod
     def generate_outfit(self, occasion: str, items: list[dict], preferences: list[str],
-                        lang: str = "en") -> dict:
+                        lang: str = "en", avoid_item_ids: list[str] | None = None) -> dict:
         """Compose one complete outfit from the given owned items (RAG: the items
         are the retrieved context). Returns {itemIds, title, rationale}."""
         ...

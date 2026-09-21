@@ -111,7 +111,22 @@ def test_stylist_reply_is_mapped_to_the_outfit_contract(set_env, monkeypatch):
 
     look = _stylist(monkeypatch, reply).generate_outfit("dinner", [], [])
 
-    assert look == {"itemIds": ["a", "b"], "title": "Soft evening", "rationale": "Because it works."}
+    assert look == {"itemIds": ["a", "b"], "title": "Soft evening",
+                    "rationale": "Because it works.", "formality": "", "season": ""}
+
+
+def test_the_formality_the_model_decided_reaches_the_caller(set_env, monkeypatch):
+    """The backend keeps gowns out of everything but a formal occasion, and it can
+    only do that if the model's own judgement comes back with the picks."""
+    set_env(VLM_API_KEY="test-key")
+    reply = ('{"plan":{"formality":"Formal","season":"summer","needs":"a gown"},'
+             '"itemIds":["a"],"title":"Gala","rationale":"Black tie."}')
+
+    look = _stylist(monkeypatch, reply).generate_outfit("gala", [], [])
+
+    assert look["formality"] == "formal"
+    assert look["season"] == "summer"
+    assert "plan" not in look
 
 
 def test_stylist_snake_case_ids_are_accepted(set_env, monkeypatch):
@@ -121,7 +136,8 @@ def test_stylist_snake_case_ids_are_accepted(set_env, monkeypatch):
     look = _stylist(monkeypatch, '{"item_ids":["a"]}').generate_outfit("dinner", [], [])
 
     assert look["itemIds"] == ["a"]
-    assert look["title"] == "Your look"  # default, not empty
+    # Blank, not an English default — the backend supplies the localized title.
+    assert look["title"] == ""
 
 
 def test_stylist_ids_are_coerced_to_strings(set_env, monkeypatch):

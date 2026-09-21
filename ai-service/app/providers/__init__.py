@@ -22,14 +22,14 @@ class _Resilient(AIProvider):
             log.warning("VLM %s failed (%s); falling back to mock", method, e)
             return getattr(self.fallback, method)(*args)
 
-    def analyze_clothing(self, image, filename):
-        return self._call("analyze_clothing", image, filename)
+    def analyze_clothing(self, image, filename, lang="en"):
+        return self._call("analyze_clothing", image, filename, lang)
 
     def analyze_beauty(self, image, filename):
         return self._call("analyze_beauty", image, filename)
 
-    def parse_clothing(self, description):
-        return self._call("parse_clothing", description)
+    def parse_clothing(self, description, lang="en"):
+        return self._call("parse_clothing", description, lang)
 
     def extract_ingredients(self, image, filename):
         return self._call("extract_ingredients", image, filename)
@@ -37,8 +37,8 @@ class _Resilient(AIProvider):
     def explain_ingredient(self, name, lang="en"):
         return self._call("explain_ingredient", name, lang)
 
-    def generate_outfit(self, occasion, items, preferences, lang="en"):
-        return self._call("generate_outfit", occasion, items, preferences, lang)
+    def generate_outfit(self, occasion, items, preferences, lang="en", avoid_item_ids=None):
+        return self._call("generate_outfit", occasion, items, preferences, lang, avoid_item_ids)
 
     def buy_advice(self, candidate, matches, scores, lang="en"):
         return self._call("buy_advice", candidate, matches, scores, lang)
@@ -56,6 +56,8 @@ def get_provider() -> AIProvider:
 
         real = OpenAICompatibleVLM(name)
     except Exception as e:  # noqa: BLE001 — missing key / bad config
+        if not settings.vlm_fallback_to_mock:
+            raise
         log.error("VLM provider '%s' init failed (%s); using mock", name, e)
         return MockProvider()
 

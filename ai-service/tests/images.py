@@ -49,3 +49,25 @@ def jpeg_bytes(width: int = 64, height: int = 64, hex_color: str = "#3E5C99") ->
     buf = io.BytesIO()
     Image.new("RGB", (width, height), hex_color).save(buf, "JPEG")
     return buf.getvalue()
+
+
+def two_tone(base_hex: str, accent_hex: str, accent_share: float, size: int = SIZE) -> bytes:
+    """A full-frame garment in two colours, the accent taking the given share of it.
+    No backdrop: every pixel belongs to the piece."""
+    img = Image.new("RGB", (size, size), base_hex)
+    rows = int(size * accent_share)
+    if rows:
+        img.paste(Image.new("RGB", (size, rows), accent_hex), (0, 0))
+    return _png(img)
+
+
+def shaded(hex_color: str, shadow: float = 0.45, share: float = 0.5, size: int = SIZE) -> bytes:
+    """One garment colour, part of it lit and part of it in shadow."""
+    r, g, b = (int(hex_color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    img = Image.new("RGB", (size, size), (r, g, b))
+    rows = int(size * share)
+    if rows:
+        dark = (int(r * shadow), int(g * shadow), int(b * shadow))
+        img.paste(Image.new("RGB", (size, rows), dark), (0, size - rows))
+    return _png(img)
+

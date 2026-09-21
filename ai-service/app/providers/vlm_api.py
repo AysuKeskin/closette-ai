@@ -23,7 +23,7 @@ except Exception:  # noqa: BLE001
     pass
 
 from app.core.config import get_settings
-from app.core.language import prompt_instruction
+from app.core.language import prompt_instruction, subcategory_instruction
 from app.providers.base import AIProvider
 from app.schemas.analysis import BeautyAnalysis, ClothingAnalysis, IngredientExplanation
 
@@ -40,13 +40,31 @@ PROVIDER_DEFAULTS = {
     "kimi": ("https://api.moonshot.ai/v1", "moonshot-v1-8k-vision-preview"),
 }
 
+# The app stores styles as a closed vocabulary: it translates them for display and
+# the stylist reasons over them, so an invented word is a word nothing understands.
+# `formal` in particular is what marks an evening gown, and the backend keeps those
+# out of everyday occasions — a gown catalogued as a summer dress defeats that.
+_STYLE_VOCABULARY = (
+    "styles (array of 1-3 words, CHOSEN ONLY from: minimal, classic, elegant, casual, chic, "
+    "edgy, boho, romantic, sporty, streetwear, preppy, feminine, timeless, trendy, oversized, "
+    "fitted, vintage, cottagecore, formal. Never invent a word outside this list. "
+    "`formal` is not an alternative to `elegant`, it is a REQUIRED FLAG: whenever the piece "
+    "is dressy enough for a black-tie or ceremonial event, `formal` MUST appear in the array, and "
+    "you may list elegant alongside it. That covers a floor-length or occasion gown (Turkish: "
+    "abiye, nişanlık, gelinlik), a sequinned or beaded evening dress, a tuxedo (smokin), and a "
+    "formal ceremonial suit. It does NOT cover a pretty summer dress, a mini party dress, a smart "
+    "blazer or a silk blouse; those are elegant, chic or classic and must NOT carry `formal`. "
+    "The app hides `formal` pieces from everyday occasions, so a gown missing this flag gets "
+    "suggested for a coffee, and a blouse carrying it never gets suggested at all), "
+)
+
 _CLOTHING_SYS = (
     "You are a fashion cataloguing assistant. Look at the clothing item and reply with "
     "ONLY a JSON object, no prose, with keys: "
     "category (one of: top, bottom, dress, outerwear, shoes, bag, accessory, jewelry), "
     "subcategory (short free text, e.g. 'cropped cardigan'), "
-    "pattern (e.g. solid, striped, floral, checked), "
-    "styles (array of 1-3 style words, e.g. minimal, feminine, classic), "
+    "pattern (one of: solid, striped, floral, checked), "
+    + _STYLE_VOCABULARY +
     "seasons (array from: spring, summer, fall, winter), "
     "confidence (number 0-1). Do not include colours."
 )
@@ -64,7 +82,12 @@ _PARSE_SYS = (
     "category (one of: top, bottom, dress, outerwear, shoes, bag, accessory, jewelry), "
     "subcategory (short free text, e.g. 'oversized blazer'), "
     "colors (array of colour words mentioned, lowercase, e.g. ['beige']), "
-    "styles (array of 1-3 style words, e.g. minimal, feminine, edgy), "
+    + _STYLE_VOCABULARY +
+    "pattern (one of: solid, striped, floral, checked), "
+    "seasons (array from: spring, summer, fall, winter — when the piece is actually wearable. "
+    "A thick knit or a wool coat is fall+winter; linen, a swimsuit or sandals are summer; a "
+    "trench or a light cardigan is spring+fall. Use all four only for something genuinely "
+    "year-round), "
     "confidence (number 0-1). Infer sensibly from the words; use [] when unsure. "
     "If the text does NOT describe a clothing/fashion item (gibberish, a food, a question, etc.), "
     "return category \"unknown\", empty colors and styles, and confidence 0 — do NOT guess."
@@ -73,13 +96,57 @@ _PARSE_SYS = (
 _STYLIST_SYS = (
     "You are a personal stylist. You are given an occasion and the user's OWNED wardrobe "
     "items (each with an id). Compose ONE complete, cohesive outfit using ONLY these items — "
-    "never invent items or ids. Rules: pick at most one top AND one bottom, OR a single dress "
-    "(a dress replaces top+bottom); then optionally add one each of shoes, outerwear, bag, "
-    "jewelry, accessory IF they suit the occasion and colours harmonise. Prefer items matching "
-    "the stated style preferences and the season/formality of the occasion. If the occasion is "
-    "unclear, gibberish, or not a real occasion, return an EMPTY itemIds array and a rationale that "
-    "says you didn't understand and asks for a clearer occasion — do NOT pick random items. Reply "
-    "with ONLY a JSON object: {\"itemIds\": [ids in wear order], \"title\": short catchy name, "
+    "never invent items or ids.\n"
+    "THINK FIRST, in this order, and put it in the \"plan\" field before choosing anything:\n"
+    "1. How formal is this occasion? Answer with one of: casual, smart, formal.\n"
+    "   - casual: coffee, groceries, a walk, the beach, a picnic, the cinema, a brunch.\n"
+    "   - smart: a restaurant dinner, a date, a birthday, a party, a job interview, the office, "
+    "a family gathering. This is the answer for MOST evenings out.\n"
+    "   - formal: only black-tie or ceremonial — a wedding, a gala, a ball, an award ceremony, "
+    "an engagement. Decide this from the OCCASION alone; what the wardrobe happens to contain "
+    "must not raise the level, and owning nothing suitable is a reason to say so in the "
+    "rationale, never a reason to call a dinner formal.\n"
+    "2. What season does it imply? Answer with one of: spring, summer, fall, winter.\n"
+    "3. What does it physically involve? Sand and water, rain, snow, a lot of walking, "
+    "exercise, sitting indoors? Every piece has to be PRACTICAL for that, not merely the "
+    "right level of dressy: no boots or closed shoes for a beach or a pool, no sandals or "
+    "heels for snow, rain or a hike, no delicate fabrics for the gym.\n"
+    "4. What does the look need to work, and which owned pieces are the strongest fit?\n"
+    "Formality decides the outfit, not the season. A wedding, a job interview or a dinner is NOT "
+    "the same outfit as a beach day or a coffee, even in identical weather. Apply it MECHANICALLY "
+    "against each item's own style words:\n"
+    "- formal or smart: use only items styled elegant, classic, timeless, chic, formal, minimal or "
+    "romantic. Items styled sporty, boho, casual, streetwear or edgy are FORBIDDEN, including bags "
+    "and shoes. A straw bag or a sneaker in a wedding look is a wrong answer.\n"
+    "- casual: prefer casual, sporty, boho, streetwear, minimal. Heels and tailoring are wrong here.\n"
+    "Season is mechanical in the same way, against each item's own `seasons`: never put a "
+    "summer-only piece into a winter occasion or a winter-only piece into a summer one. Spring "
+    "and fall pieces work in either shoulder season. A floral summer dress in the snow is a "
+    "wrong answer even under a coat.\n"
+    "A piece made for one setting does not transfer to another: swimwear belongs at a beach or "
+    "pool and nowhere else, gym clothes belong at exercise, and neither is an everyday outfit.\n"
+    "Then compose: at most one top AND one bottom, OR a single dress (a dress replaces "
+    "top+bottom); then optionally add one each of shoes, outerwear, bag, jewelry, accessory IF "
+    "they suit that formality and the colours harmonise. The look MUST include exactly one pair of "
+    "shoes whenever the wardrobe contains any that fit the formality; a look without shoes is "
+    "incomplete. Prefer items matching the stated style preferences.\n"
+    "An item styled `formal` is an evening gown. Use one ONLY for a genuinely special event: a "
+    "wedding, a gala, a ball, a formal ceremony, a black-tie dinner. A restaurant dinner, a party, "
+    "a date or a birthday is NOT one of those. Overdressing is as wrong as underdressing.\n"
+    "The context may carry `alreadySuggested`, the look the user was just shown and did not want. "
+    "Compose a genuinely DIFFERENT one: change the main pieces, not only the bag or the shoes. "
+    "Reuse an item from it only when the wardrobe leaves no alternative for that slot.\n"
+    "When several combinations work equally well, pick a different one rather than always the "
+    "same obvious default — the user asks repeatedly and wants to see their wardrobe, not one look.\n"
+    "A real occasion ALWAYS gets an outfit: if the wardrobe suits it poorly, still compose the "
+    "closest workable look from what is there and say plainly in the rationale what is missing. "
+    "Return an EMPTY itemIds array ONLY when the input is not an occasion at all — gibberish, a "
+    "random word, or an empty string — and then say you didn't understand and ask for a clearer "
+    "occasion. Never refuse a genuine occasion such as a beach day, a wedding or a job interview.\n"
+    "Reply with ONLY a JSON object, keys in this order: "
+    "{\"plan\": {\"formality\": \"casual|smart|formal\", "
+    "\"season\": \"spring|summer|fall|winter\", \"setting\": short text, "
+    "\"needs\": short text}, \"itemIds\": [ids in wear order], \"title\": short catchy name, "
     "\"rationale\": one or two sentences on why this works for the occasion}."
 )
 
@@ -121,8 +188,9 @@ class OpenAICompatibleVLM(AIProvider):
         self.provider = provider
 
     # ---- public API ----
-    def analyze_clothing(self, image: bytes, filename: str) -> ClothingAnalysis:
-        data = self._vision_json(_CLOTHING_SYS, "Analyze this clothing item.", image, filename)
+    def analyze_clothing(self, image: bytes, filename: str, lang: str = "en") -> ClothingAnalysis:
+        system = _CLOTHING_SYS + " " + subcategory_instruction(lang)
+        data = self._vision_json(system, "Analyze this clothing item.", image, filename)
         return ClothingAnalysis(
             category=str(data.get("category", "top")).lower(),
             subcategory=str(data.get("subcategory", "")),
@@ -147,10 +215,10 @@ class OpenAICompatibleVLM(AIProvider):
         items = data.get("ingredients", [])
         return [str(x).strip() for x in items if str(x).strip()][:60]
 
-    def parse_clothing(self, description: str) -> ClothingAnalysis:
+    def parse_clothing(self, description: str, lang: str = "en") -> ClothingAnalysis:
         content = self._chat(
             [
-                {"role": "system", "content": _PARSE_SYS},
+                {"role": "system", "content": _PARSE_SYS + " " + subcategory_instruction(lang)},
                 {"role": "user", "content": description},
             ],
             json_mode=True,
@@ -162,6 +230,7 @@ class OpenAICompatibleVLM(AIProvider):
             colors=[str(c).lower() for c in data.get("colors", []) if c][:4],
             pattern=str(data.get("pattern", "")),
             styles=[str(x).lower() for x in data.get("styles", []) if x][:3],
+            seasons=[str(x).lower() for x in data.get("seasons", []) if x],
             confidence=_as_float(data.get("confidence"), 0.6),
         )
 
@@ -178,11 +247,12 @@ class OpenAICompatibleVLM(AIProvider):
         return IngredientExplanation(name=name, explanation=content.strip())
 
     def generate_outfit(self, occasion: str, items: list[dict], preferences: list[str],
-                        lang: str = "en") -> dict:
+                        lang: str = "en", avoid_item_ids: list[str] | None = None) -> dict:
         context = {
             "occasion": occasion,
             "preferences": preferences or [],
             "wardrobe": items,  # the RETRIEVED context — only the user's own pieces
+            "alreadySuggested": avoid_item_ids or [],
         }
         content = self._chat(
             [
@@ -190,12 +260,22 @@ class OpenAICompatibleVLM(AIProvider):
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
             json_mode=True,
+            # Taste, not fact: at 0 every ask returns the same look forever.
+            temperature=0.8,
         )
         data = _extract_json(content)
         ids = data.get("itemIds") or data.get("item_ids") or []
+        # The plan is the model's reasoning, kept out of the response but logged so a
+        # bad pick can be traced to the formality it decided on.
+        plan = data.get("plan") or {}
+        log.debug("Stylist plan for %r: %s", occasion, plan)
         return {
+            "formality": str(plan.get("formality") or "").strip().lower(),
+            "season": str(plan.get("season") or "").strip().lower(),
             "itemIds": [str(x) for x in ids],
-            "title": str(data.get("title") or "Your look"),
+            # Empty rather than an English default: the backend fills a
+            # localized title when this comes back blank.
+            "title": str(data.get("title") or ""),
             "rationale": str(data.get("rationale") or ""),
         }
 
@@ -233,8 +313,11 @@ class OpenAICompatibleVLM(AIProvider):
         )
         return _extract_json(content)
 
-    def _chat(self, messages: list, json_mode: bool = False) -> str:
-        payload: dict = {"model": self.model, "messages": messages, "temperature": 0}
+    def _chat(self, messages: list, json_mode: bool = False, temperature: float = 0.0) -> str:
+        """Cataloguing calls keep temperature 0 so the same photo always catalogues
+        the same way. Styling is a matter of taste, not fact: at 0 the same wardrobe
+        and occasion return one identical outfit forever, so those callers raise it."""
+        payload: dict = {"model": self.model, "messages": messages, "temperature": temperature}
         if json_mode and self.provider in ("openai", "openrouter"):
             payload["response_format"] = {"type": "json_object"}
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}

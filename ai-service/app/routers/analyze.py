@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile
 
 from app.pipeline.color import extract_colors
 from app.providers import get_provider
@@ -14,10 +14,11 @@ router = APIRouter(prefix="/analyze", tags=["analyze"])
 
 
 @router.post("/clothing", response_model=ClothingAnalysis)
-async def analyze_clothing(file: UploadFile = File(...)) -> ClothingAnalysis:
+async def analyze_clothing(file: UploadFile = File(...), lang: str = Form("en")) -> ClothingAnalysis:
     image = await file.read()
     # VLM does what only a model can: category, subcategory, pattern, style, fit.
-    result = get_provider().analyze_clothing(image, file.filename or "upload")
+    # Of those, only the free-text subcategory follows `lang` — see app/core/language.py.
+    result = get_provider().analyze_clothing(image, file.filename or "upload", lang)
     # Colour is NOT the VLM's job — real pixels → nearest fashion colour (code).
     colors = extract_colors(image)
     if colors:
@@ -29,7 +30,7 @@ async def analyze_clothing(file: UploadFile = File(...)) -> ClothingAnalysis:
 @router.post("/clothing-text", response_model=ClothingAnalysis)
 async def analyze_clothing_text(req: ClothingTextRequest) -> ClothingAnalysis:
     # Natural-language input for Should-I-Buy: no pixels, so colours come from the words here.
-    return get_provider().parse_clothing(req.description)
+    return get_provider().parse_clothing(req.description, req.lang)
 
 
 @router.post("/ingredients", response_model=IngredientsResponse)

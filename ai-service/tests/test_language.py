@@ -112,8 +112,9 @@ def _capture_prompt(monkeypatch, client, method, *args):
     it would have sent."""
     sent = {}
 
-    def fake_chat(messages, json_mode=False):
+    def fake_chat(messages, json_mode=False, **kwargs):
         sent['system'] = messages[0]['content']
+        sent.update(kwargs)
         return '{}'
 
     monkeypatch.setattr(client, '_chat', fake_chat)
@@ -138,3 +139,185 @@ def test_every_prose_prompt_carries_the_requested_language(set_env, monkeypatch,
     assert prompt_instruction("tr") in turkish
     assert prompt_instruction("en") in english
     assert turkish != english
+
+
+def test_no_english_title_leaks_when_the_model_gives_none(set_env, monkeypatch):
+    # A hard-coded English default here reached Turkish users as "Your look".
+    # Empty means the backend fills its own localized title instead.
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+    monkeypatch.setattr(client, "_chat", lambda *a, **k: '{"itemIds":["a"],"rationale":"Uygun."}')
+
+    look = client.generate_outfit("akşam yemeği", [], [], "tr")
+
+    assert look["title"] == ""
+    assert look["itemIds"] == ["a"]
+
+
+def test_the_stylist_is_told_not_to_refuse_a_real_occasion(set_env, monkeypatch):
+    # The prompt used to refuse any occasion it judged unclear, and turned down
+    # "plaj günü" — a perfectly ordinary one — instead of composing a look.
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+    sent = {}
+    monkeypatch.setattr(client, "_chat",
+                        lambda messages, **k: sent.setdefault("system", messages[0]["content"]) and "{}" or "{}")
+
+    client.generate_outfit("plaj günü", [], [], "tr")
+
+    system = sent["system"]
+    assert "A real occasion ALWAYS gets an outfit" in system
+    assert "Never refuse a genuine occasion" in system
+
+
+def test_the_free_text_subcategory_follows_the_language(set_env):
+    # Everything else a garment is catalogued with is a closed vocabulary the app
+    # translates. Subcategory is free text the user reads back as their item's
+    # name, so it has to arrive already in their language.
+    set_env(AI_PROVIDER="mock")
+    from app.providers.mock import _SUBCATEGORY_TR, MockProvider
+
+    provider = MockProvider()
+    image = b"a-consistent-image"
+
+    english = provider.analyze_clothing(image, "x.jpg", "en")
+    turkish = provider.analyze_clothing(image, "x.jpg", "tr")
+
+    # Which garment the hash picks is incidental; that the two are the same
+    # garment named in two languages is the point.
+    assert turkish.subcategory == _SUBCATEGORY_TR[english.subcategory]
+    assert turkish.subcategory != english.subcategory
+    # The catalogue values are the same item in both languages.
+    assert english.category == turkish.category
+    assert english.colors == turkish.colors
+    assert english.styles == turkish.styles
+    assert english.seasons == turkish.seasons
+
+
+def test_a_turkish_description_keeps_the_turkish_noun(set_env):
+    set_env(AI_PROVIDER="mock")
+    from app.providers.mock import MockProvider
+
+    parsed = MockProvider().parse_clothing("lacivert bir elbise", "tr")
+
+    assert parsed.subcategory == "elbise"
+    assert parsed.category == "dress"
+    assert parsed.colors == ["navy"]
+
+
+def test_the_clothing_prompt_carries_the_subcategory_language(set_env, monkeypatch):
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+    seen = {}
+
+    def fake_vision(system, user, image, filename):
+        seen["system"] = system
+        return {}
+
+    monkeypatch.setattr(client, "_vision_json", fake_vision)
+    client.analyze_clothing(b"x", "x.jpg", "tr")
+
+    assert "Write subcategory in Turkish" in seen["system"]
+    assert "stays canonical English" in seen["system"]
+
+
+def test_the_stylist_is_told_to_match_formality_and_finish_the_look(set_env, monkeypatch):
+    """The three rules that made the difference in measurement.
+
+    Without them the same summer look came back for a beach day and a wedding,
+    half the looks had no shoes, and every repeat of one occasion was identical.
+    """
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+    seen = {}
+    monkeypatch.setattr(client, "_chat",
+                        lambda messages, **kw: seen.setdefault("system", messages[0]["content"]) and "{}" or "{}")
+
+    client.generate_outfit("yaz düğünü", [], [], "tr")
+    system = seen["system"]
+
+    # Reason before choosing, rather than emitting ids straight away.
+    assert '"plan"' in system
+    # Formality applied against the item's own style words, not left to taste.
+    assert "MECHANICALLY" in system
+    assert "FORBIDDEN" in system
+    # A look without shoes is incomplete.
+    assert "MUST include exactly one pair of" in system
+    # Don't return the same default every time.
+    assert "pick a different one" in system
+
+
+def test_cataloguing_uses_a_closed_style_vocabulary(set_env, monkeypatch):
+    """Styles are translated for display and reasoned over by the stylist, so an
+    invented word is a word nothing downstream understands."""
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+    seen = {}
+    monkeypatch.setattr(client, "_vision_json",
+                        lambda system, *a, **k: seen.setdefault("system", system) and {} or {})
+
+    client.analyze_clothing(b"x", "x.jpg", "tr")
+    system = seen["system"]
+
+    for word in ("minimal", "cottagecore", "streetwear", "formal"):
+        assert word in system
+    assert "Never invent a word outside this list" in system
+
+
+def test_a_gown_must_be_flagged_formal(set_env, monkeypatch):
+    """`formal` is what keeps an evening gown out of a coffee suggestion. The model
+    treated it as one adjective among many and reached for `elegant` instead, so the
+    flag has to be stated as required rather than offered as a choice."""
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+    seen = {}
+    monkeypatch.setattr(client, "_vision_json",
+                        lambda system, *a, **k: seen.setdefault("system", system) and {} or {})
+
+    client.analyze_clothing(b"x", "x.jpg", "tr")
+    system = seen["system"]
+
+    assert "REQUIRED FLAG" in system
+    assert "abiye" in system          # the Turkish term the app's users actually type
+    assert "must NOT carry `formal`" in system
+
+
+def test_the_stylist_reasons_about_what_the_occasion_physically_involves(set_env, monkeypatch):
+    """Formality and season are not enough on their own.
+
+    An edgy leather boot is a perfectly good casual shoe and still the wrong thing
+    for a beach day, so the plan has to ask what the occasion physically involves
+    before anything is chosen.
+    """
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+    seen = {}
+    monkeypatch.setattr(client, "_chat",
+                        lambda messages, **kw: seen.setdefault("system", messages[0]["content"]) and "{}" or "{}")
+
+    client.generate_outfit("plaj günü", [], [], "tr")
+    system = seen["system"]
+
+    assert "PRACTICAL" in system
+    assert "no boots or closed shoes for a beach" in system
+    # Season applied against the item's own tags, the same way formality is.
+    assert "never put a summer-only piece into a winter occasion" in system
+    # Swimwear and gym clothes do not travel.
+    assert "swimwear belongs at a beach or pool and nowhere else" in system
+
+
+def test_formality_levels_are_spelled_out_with_examples(set_env, monkeypatch):
+    """Naming the levels was not enough: asked for a restaurant dinner with only a
+    gown in the wardrobe, the model answered `formal` and suggested the gown. The
+    level has to be decided from the occasion, not from what happens to be owned."""
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+    seen = {}
+    monkeypatch.setattr(client, "_chat",
+                        lambda messages, **kw: seen.setdefault("system", messages[0]["content"]) and "{}" or "{}")
+
+    client.generate_outfit("akşam yemeği", [], [], "tr")
+    system = seen["system"]
+
+    assert "This is the answer for MOST evenings out" in system
+    assert "what the wardrobe happens to contain must not raise the level" in system
