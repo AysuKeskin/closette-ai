@@ -1,14 +1,14 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-python-multipart==0.0.9
+fastapi==0.141.1
+uvicorn[standard]==0.40.0
+python-multipart==0.0.32
 pydantic==2.9.2
 pydantic-settings==2.5.2
-httpx==0.27.2
+httpx==0.28.1
 pytest==8.3.3
 
 # Classic image tools (the "compute with code, not AI" layer; no GPU, no model).
 # Colour extraction + canonical normalization run entirely on these.
-Pillow==10.4.0
+Pillow==12.3.0
 numpy==2.1.1
 
 # Heavy, OPTIONAL runtime extras (self-hosted embeddings + HEIC decoding) live in

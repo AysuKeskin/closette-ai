@@ -1,7 +1,7 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.3.4'
-    id 'io.spring.dependency-management' version '1.1.6'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'ai.closette'
@@ -15,6 +15,15 @@ java {
 
 repositories {
     mavenCentral()
+}
+
+// Patch releases ahead of what the Spring Boot BOM pins, each one closing a
+// CRITICAL/HIGH the CI image scan gates on. Raise them when the BOM catches up;
+// removing them re-opens the vulnerability.
+ext {
+    set('tomcat.version', '10.1.59')
+    set('netty.version', '4.1.138.Final')
+    set('postgresql.version', '42.7.12')
 }
 
 dependencies {
@@ -39,7 +48,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
     // Object storage (MinIO / S3-compatible)
-    implementation 'io.minio:minio:8.5.12'
+    implementation 'io.minio:minio:8.6.0'
+    // MinIO drags in an older BouncyCastle than its CVEs allow.
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.86'
 
     // API docs
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'

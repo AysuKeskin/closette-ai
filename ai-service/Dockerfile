@@ -5,6 +5,13 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# The slim base ships whatever its last rebuild had; the CI image scan gates on
+# fixed CRITICAL/HIGH, so a patched OS package released after that rebuild fails
+# the build until we pull it in ourselves.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --system app
 
 COPY requirements.txt ./

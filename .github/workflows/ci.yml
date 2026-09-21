@@ -164,7 +164,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Boot the builder from Google's Docker Hub mirror. Pulling buildkit straight
+      # from Docker Hub fails on the runners often enough to redden a green build —
+      # anonymous pulls there are rate-limited and the connection gets reset.
       - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
 
       - name: derive image tags
         id: meta
@@ -198,6 +203,8 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           format: table
+          # Documented, dated exceptions for vulnerabilities with no released fix.
+          trivyignores: .trivyignore.yaml
 
       # Everything below runs only once the scan passes, and only off PRs:
       # a PR validates and scans, but never publishes.

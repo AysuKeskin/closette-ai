@@ -1,0 +1,2 @@
+# No accepted vulnerability exceptions. Tomcat is pinned to the patched 10.1.59 release.
+vulnerabilities: []
