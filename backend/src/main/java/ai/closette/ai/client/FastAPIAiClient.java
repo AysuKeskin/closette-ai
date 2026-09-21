@@ -28,8 +28,10 @@ import java.util.Map;
  * {@link AIService} implementation that delegates to the FastAPI service over HTTP.
  *
  * Prose endpoints carry the caller's language so a model-written rationale reads
- * in the same language as the rest of the screen; the attribute endpoints do not,
- * because what they return is catalogued, not read.
+ * in the same language as the rest of the screen. The attribute endpoints carry it
+ * too, but for one field only: {@code subcategory} is free text that the app shows
+ * back to the user as the name of their new item. Everything else those endpoints
+ * return is catalogued rather than read, and stays canonical English.
  * Any transport/parse failure is surfaced as {@link ApiException#aiUnavailable} so
  * callers can offer the "add manually" fallback (NFR-06) instead of a hard 500.
  */
@@ -46,7 +48,8 @@ public class FastAPIAiClient implements AIService {
 
     @Override
     public ClothingAnalysis analyzeClothing(byte[] image, String filename, String contentType) {
-        return postImage("/analyze/clothing", image, filename, contentType, ClothingAnalysis.class);
+        return postImage("/analyze/clothing", image, filename, contentType, ClothingAnalysis.class,
+                Messages.currentLanguageTag());
     }
 
     @Override
@@ -55,7 +58,7 @@ public class FastAPIAiClient implements AIService {
             return aiWebClient.post()
                     .uri("/analyze/clothing-text")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(Map.of("description", description))
+                    .bodyValue(Map.of("description", description, "lang", Messages.currentLanguageTag()))
                     .retrieve()
                     .bodyToMono(ClothingAnalysis.class)
                     .block();
@@ -97,7 +100,8 @@ public class FastAPIAiClient implements AIService {
     }
 
     @Override
-    public OutfitSuggestion generateOutfit(String occasion, List<OutfitCandidate> items, List<String> preferences) {
+    public OutfitSuggestion generateOutfit(String occasion, List<OutfitCandidate> items,
+                                           List<String> preferences, List<String> avoidItemIds) {
         try {
             return aiWebClient.post()
                     .uri("/generate/outfit")
@@ -106,6 +110,7 @@ public class FastAPIAiClient implements AIService {
                             "occasion", occasion == null ? "" : occasion,
                             "items", items,
                             "preferences", preferences == null ? List.of() : preferences,
+                            "avoidItemIds", avoidItemIds == null ? List.of() : avoidItemIds,
                             "lang", Messages.currentLanguageTag()))
                     .retrieve()
                     .bodyToMono(OutfitSuggestion.class)
@@ -151,6 +156,11 @@ public class FastAPIAiClient implements AIService {
     }
 
     private <T> T postImage(String path, byte[] image, String filename, String contentType, Class<T> type) {
+        return postImage(path, image, filename, contentType, type, null);
+    }
+
+    private <T> T postImage(String path, byte[] image, String filename, String contentType, Class<T> type,
+                            String lang) {
         try {
             MultipartBodyBuilder builder = new MultipartBodyBuilder();
             ByteArrayResource resource = new ByteArrayResource(image) {
@@ -163,6 +173,9 @@ public class FastAPIAiClient implements AIService {
                     .contentType(contentType != null
                             ? MediaType.parseMediaType(contentType)
                             : MediaType.APPLICATION_OCTET_STREAM);
+            if (lang != null) {
+                builder.part("lang", lang);
+            }
 
             return aiWebClient.post()
                     .uri(path)

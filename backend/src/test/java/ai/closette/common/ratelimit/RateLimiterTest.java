@@ -134,14 +134,13 @@ class RateLimiterTest {
     }
 
     @Test
-    void verificationIsAllowedWhenTheStoreIsDown() {
-        // The opposite call: an infrastructure blip must not lock someone out of
-        // their own account.
+    void verificationIsRefusedWhenTheStoreIsDown() {
+        // Authentication must not become unlimited during a Redis outage.
         RateLimiter limiter = limiter(unavailableStore());
 
         RateLimitDecision decision = limiter.spend(RateLimitBucket.VERIFY_CODE, "user", "u1", GENEROUS, 1);
 
-        assertThat(decision.allowed()).isTrue();
+        assertThat(decision.allowed()).isFalse();
     }
 
     private static CounterStore unavailableStore() {

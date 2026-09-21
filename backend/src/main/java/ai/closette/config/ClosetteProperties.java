@@ -98,6 +98,12 @@ public class ClosetteProperties {
 
     public static class Storage {
         private String endpoint = "http://localhost:9000";
+        private String publicEndpoint;
+        private String region = "us-east-1";
+        public String getPublicEndpoint() { return publicEndpoint; }
+        public void setPublicEndpoint(String value) { publicEndpoint = value; }
+        public String getRegion() { return region; }
+        public void setRegion(String value) { region = value; }
         private String accessKey;
         private String secretKey;
         private String bucketWardrobe = "wardrobe";
@@ -161,13 +167,13 @@ public class ClosetteProperties {
     public static class RateLimits {
 
         public enum Mode {
-            /** Count and log overruns, let everything through. Use this first. */
+            /** Development-only observation without enforcement. */
             LOG,
             /** Reject with 429 once a window is spent. */
             ENFORCE
         }
 
-        private Mode mode = Mode.LOG;
+        private Mode mode = Mode.ENFORCE;
         private Window user = new Window(50, 288, 900);
         private Window unverifiedUser = new Window(20, 30, 60);
         private Window ip = new Window(120, 900, 2500);

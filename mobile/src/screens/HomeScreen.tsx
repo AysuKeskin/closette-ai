@@ -19,7 +19,7 @@ import { useSavedLooks } from '../features/outfits';
 import { useAuth } from '../store/auth';
 import { colors, feedback, radius, spacing, typography } from '../theme';
 import { Screen } from '../components/ui';
-import { openLookDetail, openOnboarding, openVerifyEmail } from '../navigation/navigationRef';
+import { openLookDetail, openOnboarding, openVerifyEmail, openItemDetail } from '../navigation/navigationRef';
 import { useStylePreferences } from '../features/preferences';
 import type { HomeStackParamList } from '../navigation/types';
 
@@ -116,6 +116,7 @@ export function HomeScreen() {
                   subtitle={labels.clothingCategory(item.category)}
                   imageUrl={item.imageUrl}
                   favorite={item.favorite}
+                  onPress={() => openItemDetail(item)}
                 />
               )}
             />

@@ -91,6 +91,17 @@ export type WardrobeQuery = {
   q?: string;
 };
 
+/** Partial update: only the fields present are applied, matching UpdateItemRequest. */
+export type UpdateItemPayload = Partial<Omit<CreateItemPayload, 'imageKey'>>;
+
+/** What one re-catalogue run did; `remaining` is what the batch cap left behind. */
+export type RetagSummary = {
+  examined: number;
+  updated: number;
+  failed: number;
+  remaining: number;
+};
+
 export type CreateItemPayload = {
   name: string;
   category: ClothingCategory;
@@ -117,6 +128,18 @@ export const wardrobeApi = {
   },
   async create(payload: CreateItemPayload): Promise<WardrobeItem> {
     const { data } = await api.post<Envelope<WardrobeItem>>('/api/wardrobe/items', payload);
+    return unwrap(data);
+  },
+  async get(id: string): Promise<WardrobeItem> {
+    const { data } = await api.get<Envelope<WardrobeItem>>(`/api/wardrobe/items/${id}`);
+    return unwrap(data);
+  },
+  async retag(): Promise<RetagSummary> {
+    const { data } = await api.post<Envelope<RetagSummary>>('/api/wardrobe/items/retag');
+    return unwrap(data);
+  },
+  async update(id: string, payload: UpdateItemPayload): Promise<WardrobeItem> {
+    const { data } = await api.put<Envelope<WardrobeItem>>(`/api/wardrobe/items/${id}`, payload);
     return unwrap(data);
   },
   async list(query: WardrobeQuery = {}): Promise<WardrobeItem[]> {
@@ -151,6 +174,10 @@ export type BeautyQuery = {
 };
 
 export const beautyApi = {
+  async get(id: string): Promise<BeautyItem> {
+    const { data } = await api.get<Envelope<BeautyItem>>(`/api/beauty/items/${id}`);
+    return unwrap(data);
+  },
   async analyze(fileUri: string, mimeType: string, name: string): Promise<BeautyAnalyzeResponse> {
     const form = new FormData();
     form.append('file', { uri: fileUri, name, type: mimeType } as unknown as Blob);
@@ -209,8 +236,12 @@ export const beautyApi = {
 
 // ---- Outfits / Get Ready ----
 export const outfitApi = {
-  async generate(prompt: string, occasion?: string): Promise<GeneratedLook> {
-    const { data } = await api.post<Envelope<GeneratedLook>>('/api/outfits/generate', { prompt, occasion });
+  async generate(prompt: string, occasion?: string, excludeItemIds?: string[]): Promise<GeneratedLook> {
+    const { data } = await api.post<Envelope<GeneratedLook>>('/api/outfits/generate', {
+      prompt,
+      occasion,
+      excludeItemIds,
+    });
     return unwrap(data);
   },
   async saved(): Promise<Outfit[]> {

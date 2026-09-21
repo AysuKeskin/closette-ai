@@ -34,6 +34,7 @@ public final class MessageKeys {
     public static final String STORAGE_UPLOAD_FAILED = "error.storage.uploadFailed";
 
     // ---- AI ----
+    public static final String AI_CONSENT_REQUIRED = "error.ai.consentRequired";
     public static final String INGREDIENT_REQUIRED = "error.ingredient.required";
     public static final String AI_UNAVAILABLE = "error.ai.unavailable";
     public static final String AI_UNAVAILABLE_ADD_MANUALLY = "error.ai.unavailableAddManually";

@@ -48,6 +48,19 @@ public class User extends BaseEntity {
     @Column(name = "reset_sent_at")
     private Instant resetSentAt;
 
+    @Column(name = "reset_attempts", nullable = false)
+    private int resetAttempts;
+
+    public int getResetAttempts() { return resetAttempts; }
+    public void setResetAttempts(int value) { resetAttempts = value; }
+
+    @Column(length = 64) private String aiConsentVersion;
+    private Instant aiConsentAt;
+    public String getAiConsentVersion() { return aiConsentVersion; }
+    public void setAiConsentVersion(String v) { aiConsentVersion = v; }
+    public Instant getAiConsentAt() { return aiConsentAt; }
+    public void setAiConsentAt(Instant v) { aiConsentAt = v; }
+
     protected User() {
     }
 

@@ -33,20 +33,20 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
+    private final SessionService sessions;
     private final EmailVerificationService emailVerificationService;
     private final EmailSender emailSender;
     private final RateLimiter rateLimiter;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       JwtService jwtService,
+                       SessionService sessions,
                        EmailVerificationService emailVerificationService,
                        EmailSender emailSender,
                        RateLimiter rateLimiter) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
+        this.sessions = sessions;
         this.emailVerificationService = emailVerificationService;
         this.emailSender = emailSender;
         this.rateLimiter = rateLimiter;
@@ -54,7 +54,7 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        String email = request.email().trim().toLowerCase();
+        String email = request.email().trim().toLowerCase(java.util.Locale.ROOT);
         String username = request.username().trim();
         if (userRepository.existsByEmailIgnoreCase(email)) {
             throw ApiException.conflict(MessageKeys.AUTH_EMAIL_TAKEN);
@@ -70,31 +70,28 @@ public class AuthService {
         user = userRepository.save(user);
         // Soft verification: account is usable now; email a code to verify later.
         emailVerificationService.issue(user);
-        return issueTokens(user);
+        return sessions.issue(user);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse login(LoginRequest request) {
-        String email = request.email().trim().toLowerCase();
+        String email = request.email().trim().toLowerCase(java.util.Locale.ROOT);
         rateLimiter.enforce(RateLimitBucket.LOGIN, "email", email,
                 rateLimiter.config().getLoginEmail(), 1, "login");
-        User user = userRepository.findByEmailIgnoreCase(request.email().trim())
+        User user = userRepository.lockByEmail(request.email().trim())
                 .orElseThrow(() -> ApiException.unauthorized(MessageKeys.AUTH_INVALID_CREDENTIALS));
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw ApiException.unauthorized(MessageKeys.AUTH_INVALID_CREDENTIALS);
         }
-        return issueTokens(user);
+        return sessions.issue(user);
     }
 
-    @Transactional(readOnly = true)
     public AuthResponse refresh(RefreshRequest request) {
-        UUID userId = jwtService.parseRefreshToken(request.refreshToken());
-        if (userId == null) {
-            throw ApiException.unauthorized(MessageKeys.AUTH_INVALID_REFRESH_TOKEN);
-        }
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> ApiException.unauthorized(MessageKeys.AUTH_INVALID_REFRESH_TOKEN));
-        return issueTokens(user);
+        return sessions.rotate(request.refreshToken());
+    }
+
+    public void logout(RefreshRequest request) {
+        sessions.logout(request.refreshToken());
     }
 
     /**
@@ -104,12 +101,13 @@ public class AuthService {
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         String email = request.email().trim();
-        rateLimiter.enforce(RateLimitBucket.PASSWORD_RESET, "email", email.toLowerCase(),
+        rateLimiter.enforce(RateLimitBucket.PASSWORD_RESET, "email", email.toLowerCase(java.util.Locale.ROOT),
                 rateLimiter.config().getPasswordResetEmail(), 1, "forgot-password");
-        userRepository.findByEmailIgnoreCase(email).ifPresent(user -> {
+        userRepository.lockByEmail(email).ifPresent(user -> {
             String code = String.format("%06d", RANDOM.nextInt(1_000_000));
             Instant now = Instant.now();
             user.setResetCode(code);
+            user.setResetAttempts(0);
             user.setResetExpiresAt(now.plus(RESET_TTL));
             user.setResetSentAt(now);
             userRepository.save(user);
@@ -118,9 +116,9 @@ public class AuthService {
     }
 
     /** Complete a password reset with the emailed code and a new password. */
-    @Transactional
+    @Transactional(noRollbackFor = ApiException.class)
     public void resetPassword(ResetPasswordRequest request) {
-        User user = userRepository.findByEmailIgnoreCase(request.email().trim())
+        User user = userRepository.lockByEmail(request.email().trim())
                 .orElseThrow(() -> ApiException.validation(MessageKeys.AUTH_CODE_INCORRECT));
         String code = user.getResetCode();
         Instant expiresAt = user.getResetExpiresAt();
@@ -128,19 +126,20 @@ public class AuthService {
             throw ApiException.validation(MessageKeys.AUTH_CODE_EXPIRED);
         }
         if (!code.equals(request.code().trim())) {
+            int attempts = user.getResetAttempts() + 1;
+            user.setResetAttempts(attempts);
+            if (attempts >= 5) {
+                user.setResetCode(null);
+                user.setResetExpiresAt(null);
+            }
+            userRepository.save(user);
             throw ApiException.validation(MessageKeys.AUTH_CODE_INCORRECT);
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        sessions.revokeAll(user.getId());
         user.setResetCode(null);
         user.setResetExpiresAt(null);
         userRepository.save(user);
-    }
-
-    private AuthResponse issueTokens(User user) {
-        return new AuthResponse(
-                jwtService.generateAccessToken(user.getId()),
-                jwtService.generateRefreshToken(user.getId()),
-                UserResponse.from(user));
     }
 
     private static String safeName(String name) {

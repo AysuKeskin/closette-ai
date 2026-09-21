@@ -4,6 +4,8 @@ import { Alert, Dimensions, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Header, ItemTile, Screen } from '../../components/ui';
 import { useDeleteLook } from '../../features/outfits';
+import { useDomainLabels } from '../../i18n/domain';
+import { openItemDetail } from '../../navigation/navigationRef';
 import { useT } from '../../i18n';
 import { colors, radius, spacing } from '../../theme';
 import type { AppStackParamList } from '../../navigation/types';
@@ -19,7 +21,8 @@ function formatDate(iso: string): string {
 
 /** Full view of one saved look, with its pieces and a remove (un-save) action. */
 export function LookDetailScreen() {
-  const { t: text } = useT();
+  const { t: text, tPlural } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const look = useRoute<RouteProp<AppStackParamList, 'LookDetail'>>().params.look;
   const deleteLook = useDeleteLook();
@@ -69,7 +72,7 @@ export function LookDetailScreen() {
       ) : null}
 
       <AppText variant="label" tone="muted" style={styles.sectionLabel}>
-        {look.items.length} PIECE{look.items.length === 1 ? '' : 'S'}
+        {tPlural('home.lookPieces', look.items.length)}
       </AppText>
       <View style={styles.grid}>
         {look.items.map((item) => (
@@ -77,8 +80,9 @@ export function LookDetailScreen() {
             key={item.id}
             width={TILE_W}
             title={item.name}
-            subtitle={item.category.toLowerCase()}
+            subtitle={labels.clothingCategory(item.category)}
             imageUrl={item.imageUrl}
+            onPress={() => openItemDetail(item)}
           />
         ))}
       </View>

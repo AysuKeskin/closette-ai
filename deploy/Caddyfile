@@ -1,0 +1,9 @@
+{$API_HOST} {
+    reverse_proxy backend:8080 {
+        header_up X-Forwarded-For {remote_host}
+    }
+}
+
+{$STORAGE_HOST} {
+    reverse_proxy minio:9000
+}

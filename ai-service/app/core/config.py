@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,24 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    app_env: str = "development"
+
+    @model_validator(mode="after")
+    def production_settings(self):
+        if self.app_env == "production":
+            allowed = {"openai", "openrouter", "dashscope", "qwen", "moonshot", "kimi"}
+            if self.ai_provider not in allowed:
+                raise ValueError("Production requires an explicit supported AI provider")
+            if self.vlm_fallback_to_mock:
+                raise ValueError("Disable VLM_FALLBACK_TO_MOCK in production")
+            if not self.vlm_model:
+                raise ValueError("Pin VLM_MODEL in production")
+            if not (self.vlm_api_key or self.openai_api_key or self.qwen_api_key or self.kimi_api_key):
+                raise ValueError("Production requires an AI API key")
+            if self.vlm_base_url and not self.vlm_base_url.startswith("https://"):
+                raise ValueError("VLM_BASE_URL must use HTTPS in production")
+        return self
 
     # VLM — only used for things a model is actually needed for.
     # All non-mock providers speak the OpenAI chat-completions schema, so one

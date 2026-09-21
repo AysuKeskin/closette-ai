@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { beautyApi, type BeautyQuery } from '../api/endpoints';
-import type { CreateBeautyPayload, UpdateBeautyPayload } from '../api/types';
+import type { BeautyItem, CreateBeautyPayload, UpdateBeautyPayload } from '../api/types';
 import { queryKeys } from './queryClient';
 
 export function useBeauty(query: BeautyQuery = {}) {
@@ -38,6 +38,15 @@ export function useCreateBeauty() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['beauty'] });
     },
+  });
+}
+
+/** Same reason as useItem: the detail screen's route params go stale after an edit. */
+export function useBeautyItem(id: string, initial: BeautyItem) {
+  return useQuery({
+    queryKey: queryKeys.beautyItem(id),
+    queryFn: () => beautyApi.get(id),
+    initialData: initial,
   });
 }
 

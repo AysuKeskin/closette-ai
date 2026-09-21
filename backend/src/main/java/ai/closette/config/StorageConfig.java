@@ -12,6 +12,7 @@ public class StorageConfig {
         ClosetteProperties.Storage s = props.getStorage();
         return MinioClient.builder()
                 .endpoint(s.getEndpoint())
+                .region(s.getRegion())
                 .credentials(s.getAccessKey(), s.getSecretKey())
                 .build();
     }

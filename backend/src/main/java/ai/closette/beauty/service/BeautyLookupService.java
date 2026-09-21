@@ -56,7 +56,11 @@ public class BeautyLookupService {
             "neutrogena", "olay", "nivea", "garnier", "bioderma", "vichy", "eucerin", "aveeno",
             "glossier", "rarebeauty", "sephora", "kylie", "huda", "anastasia", "morphe", "tarte",
             "hourglass", "bobbibrown", "clarins", "shiseido", "kiehls", "drunkelephant",
-            "paulaschoice", "firstaidbeauty", "tatcha", "pixi", "burtsbees", "physiciansformula");
+            "paulaschoice", "firstaidbeauty", "tatcha", "pixi", "burtsbees", "physiciansformula",
+            // Turkish shelves: without these a search in Turkish ranks local products last.
+            "flormar", "goldenrose", "farmasi", "avon", "oriflame", "pastel", "note", "gratis",
+            "sebamed", "bioxcin", "dermokil", "hobby", "arkopharma", "nuxe", "vichyturkiye",
+            "eveline", "lorealparis", "sheglam", "beaulis", "gabrini", "koton");
 
     private final WebClient obf = WebClient.builder()
             .baseUrl("https://world.openbeautyfacts.org")
@@ -71,6 +75,8 @@ public class BeautyLookupService {
 
     private final String rapidApiKey;
     private final String rapidApiHost;
+    private final String rapidSearchPath;
+    private final String rapidQueryParam;
     private final WebClient rapid;
 
     // The Makeup API has no free-text search, so we cache its catalogue and match in memory.
@@ -83,9 +89,13 @@ public class BeautyLookupService {
 
     public BeautyLookupService(
             @Value("${closette.beauty.rapidapi-key:}") String rapidApiKey,
-            @Value("${closette.beauty.rapidapi-host:sephora.p.rapidapi.com}") String rapidApiHost) {
+            @Value("${closette.beauty.rapidapi-host:sephora.p.rapidapi.com}") String rapidApiHost,
+            @Value("${closette.beauty.rapidapi-search-path:/products/list}") String rapidSearchPath,
+            @Value("${closette.beauty.rapidapi-query-param:q}") String rapidQueryParam) {
         this.rapidApiKey = rapidApiKey == null ? "" : rapidApiKey.trim();
         this.rapidApiHost = rapidApiHost;
+        this.rapidSearchPath = rapidSearchPath;
+        this.rapidQueryParam = rapidQueryParam;
         this.rapid = WebClient.builder()
                 .baseUrl("https://" + rapidApiHost)
                 .codecs(c -> c.defaultCodecs().maxInMemorySize(8 * 1024 * 1024))
@@ -93,7 +103,7 @@ public class BeautyLookupService {
         if (this.rapidApiKey.isBlank()) {
             log.info("Beauty search: RapidAPI source disabled (no key); using Makeup API + Open Beauty Facts");
         } else {
-            log.info("Beauty search: RapidAPI source enabled on host {}", rapidApiHost);
+            log.info("Beauty search: RapidAPI source enabled on {}{}?{}=", rapidApiHost, rapidSearchPath, rapidQueryParam);
         }
     }
 
@@ -161,6 +171,9 @@ public class BeautyLookupService {
             if (brand.contains(t)) s += 2;
         }
         if (c.imageUrl() != null && !c.imageUrl().isBlank()) s += 1;
+        // Community catalogues carry stubs whose name is just the search word and whose
+        // brand is empty. They match everything and tell the shopper nothing.
+        if (brand.isBlank()) s -= 4;
         return s;
     }
 
@@ -174,12 +187,14 @@ public class BeautyLookupService {
 
     // ---- Source: RapidAPI (optional) ----
 
-    private List<BeautyProductCandidate> rapidApiSearch(String query) {
+    private List<BeautyProductCandidate> rapidApiSearch(String rawQuery) {
         if (rapidApiKey.isBlank()) return List.of();
+        // Last variant is the English reading when there is one, the query as typed otherwise.
+        String query = BeautyTerms.expand(rawQuery).stream().reduce((a, b) -> b).orElse(rawQuery);
         try {
             JsonNode root = rapid.get()
-                    .uri(uri -> uri.path("/products/list")
-                            .queryParam("q", query)
+                    .uri(uri -> uri.path(rapidSearchPath)
+                            .queryParam(rapidQueryParam, query)
                             .queryParam("pageSize", "15")
                             .build())
                     .header("X-RapidAPI-Key", rapidApiKey)
@@ -253,6 +268,16 @@ public class BeautyLookupService {
     // ---- Source: Makeup API ----
 
     private List<BeautyProductCandidate> makeupSearch(String query) {
+        // This catalogue is English-only and matched in memory, so trying the query's
+        // English reading as well costs nothing and is the only way "ruj" reaches it.
+        for (String variant : BeautyTerms.expand(query)) {
+            List<BeautyProductCandidate> hits = makeupMatch(variant);
+            if (!hits.isEmpty()) return hits;
+        }
+        return List.of();
+    }
+
+    private List<BeautyProductCandidate> makeupMatch(String query) {
         String[] tokens = tokens(query);
         List<BeautyProductCandidate> out = new ArrayList<>();
         for (MakeupEntry e : makeupCatalog()) {
@@ -362,16 +387,34 @@ public class BeautyLookupService {
     }
 
     private static String[] tokens(String query) {
-        return query.toLowerCase(Locale.ROOT).trim().split("\\s+");
+        return BeautyTerms.fold(query).split(" ");
     }
 
+    /**
+     * One entry per product, not per shade.
+     *
+     * A lipstick ships in thirty colours and the sources list every one, so a search
+     * for "ruj" came back as the same Maybelline three times over. Everything from a
+     * trailing shade or size marker onwards is dropped — but only when that marker is
+     * near the end, so the 15 in "SPF 15 ... 6 ml" is kept and only "6 ml" goes.
+     */
     private static String dedupeKey(BeautyProductCandidate c) {
-        return ((c.brand() == null ? "" : c.brand()) + "|" + (c.productName() == null ? "" : c.productName()))
-                .toLowerCase(Locale.ROOT).trim();
+        String brand = BeautyTerms.fold(c.brand());
+        String[] words = BeautyTerms.fold(c.productName()).split(" ");
+        int cut = words.length;
+        for (int i = Math.max(0, words.length - 3); i < words.length; i++) {
+            // Shade codes are alphanumeric as often as numeric ("FC62", "No:27", "115").
+            // SPF is spelled the same way and is a real product difference, never a shade.
+            if (!words[i].contains("spf") && words[i].matches("(no:?)?[a-z]{0,3}\\d+([.,]\\d+)?(ml|gr?|oz)?")) {
+                cut = i;
+                break;
+            }
+        }
+        return brand + "|" + String.join(" ", java.util.Arrays.copyOfRange(words, 0, cut));
     }
 
     private static String normalize(String s) {
-        return s == null ? "" : s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+        return BeautyTerms.fold(s).replaceAll("[^a-z0-9]", "");
     }
 
     // Upgrade protocol-relative ("//...") and plain-http image links to https (iOS ATS blocks http).
@@ -425,15 +468,7 @@ public class BeautyLookupService {
     }
 
     private static BeautyCategory guessCategory(String hay) {
-        String h = hay == null ? "" : hay.toLowerCase(Locale.ROOT);
-        if (containsAny(h, "lipstick", "mascara", "foundation", "makeup", "make-up", "eyeliner", "blush", "concealer")) {
-            return BeautyCategory.MAKEUP;
-        }
-        if (containsAny(h, "shampoo", "conditioner", "hair")) return BeautyCategory.HAIRCARE;
-        if (containsAny(h, "perfume", "fragrance", "eau de", "cologne")) return BeautyCategory.PERFUME;
-        if (containsAny(h, "nail", "polish")) return BeautyCategory.NAILS;
-        if (containsAny(h, "body", "lotion", "shower", "deodorant")) return BeautyCategory.BODYCARE;
-        return BeautyCategory.SKINCARE;
+        return BeautyTerms.guessCategory(hay);
     }
 
     private static boolean containsAny(String h, String... keys) {

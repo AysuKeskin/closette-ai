@@ -5,6 +5,7 @@ import ai.closette.common.ratelimit.RateLimit;
 import ai.closette.common.security.SecurityUtil;
 import ai.closette.wardrobe.dto.AnalyzeResponse;
 import ai.closette.wardrobe.dto.CreateItemRequest;
+import ai.closette.wardrobe.dto.RetagSummary;
 import ai.closette.wardrobe.dto.UpdateItemRequest;
 import ai.closette.wardrobe.dto.WardrobeItemResponse;
 import ai.closette.wardrobe.model.ClothingCategory;
@@ -42,6 +43,18 @@ public class WardrobeController {
     @PostMapping(value = "/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<AnalyzeResponse> analyze(@RequestParam("file") MultipartFile file) {
         return ApiResponse.ok(service.analyze(SecurityUtil.currentUserId(), file));
+    }
+
+    /**
+     * Re-derive the catalogue tags of pieces already saved.
+     *
+     * One text call per piece, capped at a batch, so the cost is a fraction of
+     * re-analysing every photo — but still enough of it to be worth charging for.
+     */
+    @RateLimit(cost = 40)
+    @PostMapping("/items/retag")
+    public ApiResponse<RetagSummary> retag() {
+        return ApiResponse.ok(service.retag(SecurityUtil.currentUserId()));
     }
 
     /** Flow A step 2 — save the confirmed item. */

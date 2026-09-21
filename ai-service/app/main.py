@@ -1,10 +1,21 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.routers import analyze, embed, generate, image, ingredients
 
+@asynccontextmanager
+async def lifespan(app):
+    settings = get_settings()
+    if settings.app_env == "production":
+        from app.providers import get_provider
+        get_provider()  # Validate credentials/config before accepting traffic; no inference call.
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Closette AI Service",
     description=(
         "Provider-independent AI layer. The VLM is used only where a model is "

@@ -1,5 +1,6 @@
 package ai.closette.support;
 
+import ai.closette.auth.dto.AuthResponse;
 import ai.closette.auth.dto.RegisterRequest;
 import ai.closette.auth.service.AuthService;
 import ai.closette.user.model.User;
@@ -25,12 +26,22 @@ public final class TestData {
 
     /** Registers a fresh, unverified user and returns its id. */
     public static UUID newUser(AuthService authService) {
+        return register(authService).user().id();
+    }
+
+    /**
+     * Same registration, but the whole response. Access tokens are only accepted
+     * while the session that issued them is alive, so a test calling an endpoint
+     * over HTTP needs the token registration handed out, not one minted from the
+     * user id alone.
+     */
+    public static AuthResponse register(AuthService authService) {
         long n = SEQUENCE.incrementAndGet();
         return authService.register(new RegisterRequest(
                 "user" + n + "." + System.nanoTime() + "@test.io",
                 "user_" + n + "_" + System.nanoTime(),
                 "Password123",
-                "Test User")).user().id();
+                "Test User"));
     }
 
     /**
@@ -46,7 +57,13 @@ public final class TestData {
 
     public static CreateItemRequest item(String name, ClothingCategory category,
                                          List<String> colors, List<String> styles) {
+        return item(name, category, colors, styles, List.of("spring"));
+    }
+
+    /** Same, with the seasons spelled out — for tests about when a piece is worn. */
+    public static CreateItemRequest item(String name, ClothingCategory category, List<String> colors,
+                                         List<String> styles, List<String> seasons) {
         return new CreateItemRequest(name, category, null, colors, "solid", styles,
-                List.of("spring"), null, null, null, false);
+                seasons, null, null, null, false);
     }
 }

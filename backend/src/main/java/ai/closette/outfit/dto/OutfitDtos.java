@@ -17,10 +17,16 @@ public final class OutfitDtos {
     }
 
     /** FR-07 — free-text description of the occasion. */
+    /** {@code excludeItemIds} carries the look already on screen, so "try another"
+     *  asks for a different one instead of re-rolling the same answer. */
     public record GetReadyRequest(
             String prompt,
-            String occasion
+            String occasion,
+            List<String> excludeItemIds
     ) {
+        public List<String> excludeItemIds() {
+            return excludeItemIds == null ? List.of() : excludeItemIds;
+        }
     }
 
     /** A generated (not-yet-saved) look plus a plain-language rationale (NFR-07). */

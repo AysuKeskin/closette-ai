@@ -22,6 +22,8 @@ spring:
       - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
 
 closette:
+  ratelimit:
+    mode: log
   jwt:
     secret: test-secret-that-is-definitely-long-enough-for-hs256-0123456789
     access-ttl-minutes: 60
@@ -31,6 +33,8 @@ closette:
     # exercise the deterministic rule-based fallbacks (not a live LLM).
     base-url: http://localhost:1
   storage:
+    cleanup-delay-ms: 3600000
+    reconcile-delay-ms: 3600000
     endpoint: http://localhost:9000
     access-key: test
     secret-key: test12345

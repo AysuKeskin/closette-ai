@@ -7,14 +7,13 @@ import {
   AppText,
   Button,
   Card,
-  Chip,
   Header,
   Icon,
   ItemTile,
   LoadingState,
   Screen,
 } from '../../components/ui';
-import { useDeleteItem, useSimilarItems, useToggleFavorite } from '../../features/wardrobe';
+import { useDeleteItem, useItem, useSimilarItems, useToggleFavorite } from '../../features/wardrobe';
 import { useT } from '../../i18n';
 import { useDomainLabels } from '../../i18n/domain';
 import { colors, feedback, radius, spacing, typography } from '../../theme';
@@ -24,7 +23,10 @@ export function ItemDetailScreen() {
   const { t: text } = useT();
   const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<WardrobeStackParamList>>();
-  const { item } = useRoute<RouteProp<WardrobeStackParamList, 'ItemDetail'>>().params;
+  // Route params are a snapshot from the moment we navigated; an edit would not
+  // show up here. The query re-reads the item and the edit invalidates it.
+  const { item: snapshot } = useRoute<RouteProp<WardrobeStackParamList, 'ItemDetail'>>().params;
+  const item = useItem(snapshot.id, snapshot).data;
   const similar = useSimilarItems(item.id);
   const toggleFav = useToggleFavorite();
   const deleteItem = useDeleteItem();
@@ -46,8 +48,20 @@ export function ItemDetailScreen() {
     ]);
   };
 
-  const meta = [labels.clothingCategory(item.category), item.subcategory].filter(Boolean).join(' · ');
-  const tags = [...item.colors, ...item.styles, ...item.seasons];
+  const list = (values: string[], label: (v: string) => string) =>
+    values.map(label).filter(Boolean).join(', ');
+
+  // Mirrors the edit form field for field, so what you read is what you edit.
+  const spec: { label: string; value: string }[] = [
+    { label: text('common.category'), value: labels.clothingCategory(item.category) },
+    { label: text('confirm.subcategory'), value: item.subcategory ?? '' },
+    { label: text('confirm.colors'), value: list(item.colors, labels.color) },
+    { label: text('confirm.pattern'), value: labels.pattern(item.pattern ?? '') },
+    { label: text('confirm.styles'), value: list(item.styles, labels.style) },
+    { label: text('confirm.seasons'), value: list(item.seasons, labels.season) },
+    { label: text('item.brandLabel'), value: item.brand ?? '' },
+    { label: text('item.sizeOnly'), value: item.size ?? '' },
+  ].filter((row) => row.value.trim().length > 0);
 
   return (
     <Screen scroll>
@@ -66,31 +80,29 @@ export function ItemDetailScreen() {
       <AppText variant="h2" style={styles.name}>
         {item.name}
       </AppText>
-      {meta ? (
-        <AppText variant="label" tone="muted">
-          {meta}
-        </AppText>
-      ) : null}
-      {item.brand ? (
-        <AppText variant="label" tone="secondary" style={styles.brand}>
-          {item.brand}
-          {item.size ? text('item.sizeLabel', { size: item.size }) : ''}
-        </AppText>
-      ) : null}
-
-      {tags.length > 0 ? (
-        <View style={styles.tags}>
-          {tags.map((tag, i) => (
-            <Chip key={`${tag}-${i}`} label={labels.tag(tag)} />
-          ))}
-        </View>
-      ) : null}
+      <Card style={styles.spec}>
+        {spec.map((row, i) => (
+          <View key={row.label} style={[styles.specRow, i > 0 && styles.specRowDivided]}>
+            <AppText variant="label" tone="secondary" style={styles.specLabel}>
+              {row.label}
+            </AppText>
+            <AppText variant="body" style={styles.specValue}>
+              {row.value}
+            </AppText>
+          </View>
+        ))}
+      </Card>
 
       <View style={styles.actions}>
         <Button
           label={fav ? text('item.favorited') : text('item.addToFavorites')}
           variant={fav ? 'primary' : 'secondary'}
           onPress={onToggleFav}
+        />
+        <Button
+          label={text('common.edit')}
+          variant="secondary"
+          onPress={() => navigation.navigate('EditItem', { item })}
         />
       </View>
 
@@ -147,8 +159,11 @@ const styles = StyleSheet.create({
   },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
   name: { marginTop: spacing.lg },
-  brand: { marginTop: spacing.xs },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  spec: { marginTop: spacing.lg, paddingVertical: spacing.xs },
+  specRow: { flexDirection: 'row', alignItems: 'baseline', paddingVertical: spacing.sm, gap: spacing.md },
+  specRowDivided: { borderTopWidth: 1, borderTopColor: colors.border },
+  specLabel: { width: 108 },
+  specValue: { flex: 1 },
   actions: { gap: spacing.sm, marginTop: spacing.xl },
   similar: { marginTop: spacing.xxl },
   similarTitle: { marginBottom: spacing.md },

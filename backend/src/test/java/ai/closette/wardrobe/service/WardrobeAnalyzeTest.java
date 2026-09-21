@@ -16,7 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -51,10 +51,10 @@ class WardrobeAnalyzeTest {
     @Autowired
     WardrobeService wardrobeService;
 
-    @MockBean
+    @MockitoBean
     StorageService storage;
 
-    @MockBean
+    @MockitoBean
     AIService aiService;
 
     @BeforeEach
@@ -65,6 +65,15 @@ class WardrobeAnalyzeTest {
 
     private UUID newUser() {
         return TestData.newUser(authService);
+    }
+
+    /**
+     * An image key the owner check accepts. Keys are namespaced by user id so a
+     * request cannot claim a key belonging to somebody else, and a made-up name
+     * is rejected before the item is ever saved.
+     */
+    private static String ownedKey(UUID userId) {
+        return userId + "/" + UUID.randomUUID() + ".jpg";
     }
 
     private static MockMultipartFile photo() {
@@ -111,12 +120,13 @@ class WardrobeAnalyzeTest {
         // Visual similarity is a nice-to-have; losing it must never cost the user
         // the item they just added.
         UUID userId = newUser();
-        when(storage.download("wardrobe", "key-1")).thenReturn("image-bytes".getBytes());
+        String key = ownedKey(userId);
+        when(storage.download("wardrobe", key)).thenReturn("image-bytes".getBytes());
         when(aiService.embedItem(any(), any(), any())).thenThrow(new IllegalStateException("model down"));
 
         WardrobeItemResponse created = wardrobeService.create(userId, new CreateItemRequest(
                 "Navy dress", ClothingCategory.DRESSES, null, List.of("navy"), "solid",
-                List.of("minimal"), List.of("spring"), null, null, "key-1", false));
+                List.of("minimal"), List.of("spring"), null, null, key, false));
 
         assertThat(created.id()).isNotNull();
         assertThat(wardrobeService.get(userId, created.id()).name()).isEqualTo("Navy dress");
@@ -125,11 +135,12 @@ class WardrobeAnalyzeTest {
     @Test
     void anUnreadableStoredImageIsToleratedToo() {
         UUID userId = newUser();
-        when(storage.download("wardrobe", "key-2")).thenReturn(null);
+        String key = ownedKey(userId);
+        when(storage.download("wardrobe", key)).thenReturn(null);
 
         assertThatCode(() -> wardrobeService.create(userId, new CreateItemRequest(
                 "Navy dress", ClothingCategory.DRESSES, null, List.of("navy"), "solid",
-                List.of("minimal"), List.of("spring"), null, null, "key-2", false)))
+                List.of("minimal"), List.of("spring"), null, null, key, false)))
                 .doesNotThrowAnyException();
         verify(aiService, org.mockito.Mockito.never()).embedItem(any(), any(), any());
     }

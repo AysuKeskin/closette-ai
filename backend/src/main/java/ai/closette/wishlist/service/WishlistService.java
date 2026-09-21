@@ -26,6 +26,8 @@ public class WishlistService {
 
     @Transactional
     public WishlistItemResponse create(UUID userId, CreateWishlistItemRequest req) {
+        ai.closette.storage.service.ImageRegistry.requireOwnedKey(userId, req.imageKey());
+        storage.claim(storage.wardrobeBucket(), userId, req.imageKey());
         WishlistItem item = new WishlistItem(userId);
         item.setProductName(req.productName().trim());
         item.setBrand(req.brand());
@@ -44,10 +46,11 @@ public class WishlistService {
     public void delete(UUID userId, UUID id) {
         WishlistItem item = repository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> ApiException.notFound(MessageKeys.WISHLIST_NOT_FOUND));
+        storage.release(storage.wardrobeBucket(), userId, item.getImageKey());
         repository.delete(item);
     }
 
     private WishlistItemResponse toResponse(WishlistItem item) {
-        return WishlistItemResponse.from(item, storage.presignedUrl(storage.wardrobeBucket(), item.getImageKey()));
+        return WishlistItemResponse.from(item, storage.presignedOwnedUrl(storage.wardrobeBucket(), item.getUserId(), item.getImageKey()));
     }
 }

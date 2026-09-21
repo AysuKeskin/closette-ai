@@ -90,19 +90,10 @@ public class RateLimiter {
         return Duration.between(now, end);
     }
 
-    /**
-     * Redis is down. The two buckets want opposite answers, so they get them:
-     * letting AI calls through would spend real money with no ceiling, while
-     * blocking verification would lock people out of their own accounts over an
-     * infrastructure blip.
-     */
+    /** Authentication and paid AI calls must not become unlimited during a Redis outage. */
     private RateLimitDecision onStoreDown(RateLimitBucket bucket, Exception e) {
-        if (bucket == RateLimitBucket.AI) {
-            log.error("Rate-limit store unavailable — refusing AI requests to protect spend", e);
-            return RateLimitDecision.deny("store", "unavailable", Duration.ofSeconds(30));
-        }
-        log.warn("Rate-limit store unavailable — allowing {} through unmetered", bucket, e);
-        return RateLimitDecision.allow();
+        log.error("Rate-limit store unavailable — refusing {} until quotas can be checked", bucket, e);
+        return RateLimitDecision.deny("store", "unavailable", Duration.ofSeconds(30));
     }
 
     /**

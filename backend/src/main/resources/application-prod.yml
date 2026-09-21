@@ -1,0 +1,14 @@
+server:
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # Only the Caddy container on the production network may supply client IPs.
+      internal-proxies: '172\.29\.83\.2'
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+logging:
+  level:
+    ai.closette: INFO

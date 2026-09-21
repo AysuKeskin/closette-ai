@@ -3,8 +3,9 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import { translate } from '../i18n';
-import { useAuth } from '../store/auth';
+import { useAuth, setSessionRevoker } from '../store/auth';
 import { currentLanguage } from '../store/locale';
+import { ensureAiConsent, needsAiConsent } from './consent';
 import type { ApiEnvelope, AuthResult } from './types';
 
 /**
@@ -15,9 +16,10 @@ import type { ApiEnvelope, AuthResult } from './types';
  */
 function resolveBaseUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL;
-  if (fromEnv) return fromEnv;
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
   const fromExtra = (Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined)?.apiBaseUrl;
-  if (fromExtra && Platform.OS !== 'android') return fromExtra;
+  if (fromExtra) return fromExtra.replace(/\/$/, '');
+  if (!__DEV__) throw new Error('Missing production API URL');
   return Platform.OS === 'android' ? 'http://10.0.2.2:8080' : 'http://localhost:8080';
 }
 
@@ -31,56 +33,65 @@ export const api = axios.create({
 // Attach the access token and the user's language to every request. The backend
 // answers in that language: its error messages and the AI's prose come back
 // ready to display, so the app never translates server text itself.
-api.interceptors.request.use((config) => {
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _sessionEpoch?: number;
+    _retry?: boolean;
+  }
+}
+
+const bare = axios.create({ baseURL: API_BASE_URL, timeout: 30000 });
+setSessionRevoker(async (refreshToken) => { await bare.post('/api/auth/logout', { refreshToken }); });
+
+api.interceptors.request.use(async (config) => {
+  const epoch = useAuth.getState().sessionEpoch;
+  if (config._sessionEpoch !== undefined && config._sessionEpoch !== epoch) throw new axios.CanceledError();
+  config._sessionEpoch = epoch;
+  const isAuth = config.url?.startsWith('/api/auth/');
+  if (!isAuth && needsAiConsent(config)) await ensureAiConsent(bare, epoch);
+  if (useAuth.getState().sessionEpoch !== epoch) throw new axios.CanceledError();
   const headers = AxiosHeaders.from(config.headers);
   const token = useAuth.getState().accessToken;
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
+  if (!isAuth && token) headers.set('Authorization', `Bearer ${token}`);
   headers.set('Accept-Language', currentLanguage());
   config.headers = headers;
   return config;
 });
 
-// A bare client (no interceptors) for the refresh call, to avoid recursion.
-const bare = axios.create({ baseURL: API_BASE_URL, timeout: 30000 });
+let refreshing: { epoch: number; promise: Promise<string | null> } | null = null;
 
-let refreshing: Promise<string | null> | null = null;
-
-async function refreshAccessToken(): Promise<string | null> {
+async function refreshAccessToken(epoch: number): Promise<string | null> {
   const { refreshToken } = useAuth.getState();
-  if (!refreshToken) return null;
+  if (!refreshToken || useAuth.getState().sessionEpoch !== epoch) return null;
   try {
     const resp = await bare.post<ApiEnvelope<AuthResult>>('/api/auth/refresh', { refreshToken });
     const data = resp.data.data;
-    if (!data) return null;
-    await useAuth.getState().updateTokens(data.accessToken, data.refreshToken);
-    return data.accessToken;
-  } catch {
-    return null;
-  }
+    if (!data || epoch !== useAuth.getState().sessionEpoch) return null;
+    await useAuth.getState().updateTokens(data.accessToken, data.refreshToken, epoch);
+    return epoch === useAuth.getState().sessionEpoch ? data.accessToken : null;
+  } catch { return null; }
 }
 
-// On 401, try a single refresh + retry; otherwise sign out.
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.config._sessionEpoch !== useAuth.getState().sessionEpoch) throw new axios.CanceledError();
+    return response;
+  },
   async (error: AxiosError) => {
-    const original = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
-    const status = error.response?.status;
-    if (status === 401 && original && !original._retry) {
+    const original = error.config;
+    const epoch = original?._sessionEpoch;
+    if (epoch !== undefined && epoch !== useAuth.getState().sessionEpoch) throw new axios.CanceledError();
+    if (error.response?.status === 401 && original && !original._retry
+        && !original.url?.startsWith('/api/auth/') && epoch !== undefined) {
       original._retry = true;
-      if (!refreshing) {
-        refreshing = refreshAccessToken().finally(() => {
-          refreshing = null;
-        });
+      if (!refreshing || refreshing.epoch !== epoch) {
+        const current = { epoch, promise: refreshAccessToken(epoch) };
+        refreshing = current;
+        void current.promise.finally(() => { if (refreshing === current) refreshing = null; });
       }
-      const newToken = await refreshing;
-      if (newToken) {
-        const headers = AxiosHeaders.from(original.headers);
-        headers.set('Authorization', `Bearer ${newToken}`);
-        original.headers = headers;
-        return api.request(original);
-      }
+      const token = await refreshing.promise;
+      if (epoch !== useAuth.getState().sessionEpoch) throw new axios.CanceledError();
+      if (token) return api.request(original);
       await useAuth.getState().signOut();
     }
     return Promise.reject(error);
@@ -114,6 +125,7 @@ export class ApiError extends Error {
 /** Normalizes any thrown value (axios/envelope) into an ApiError. */
 export function toApiError(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
+  if (axios.isCancel(err)) return new ApiError('CANCELED', err.message || translate(currentLanguage(), 'consent.declined'));
   if (axios.isAxiosError(err)) {
     const envelope = err.response?.data as ApiEnvelope<unknown> | undefined;
     if (envelope?.error) return new ApiError(envelope.error.code, envelope.error.message);

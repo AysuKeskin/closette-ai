@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 
-export const queryClient = new QueryClient({
+const makeQueryClient = () => new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
@@ -10,9 +10,20 @@ export const queryClient = new QueryClient({
   },
 });
 
+export let queryClient = makeQueryClient();
+
+export function resetQueryClient() {
+  const previous = queryClient;
+  queryClient = makeQueryClient();
+  void previous.cancelQueries();
+  previous.clear();
+}
+
 export const queryKeys = {
   wardrobe: (params?: unknown) => ['wardrobe', params ?? {}] as const,
   wardrobeRecent: ['wardrobe', 'recent'] as const,
+  wardrobeItem: (id: string) => ['wardrobe', 'item', id] as const,
   beauty: (query?: Record<string, unknown>) => ['beauty', query ?? {}] as const,
+  beautyItem: (id: string) => ['beauty', 'item', id] as const,
   savedLooks: ['outfits', 'saved'] as const,
 };

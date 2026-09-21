@@ -46,7 +46,7 @@
       ]
     ],
     "extra": {
-      "apiBaseUrl": "http://localhost:8080"
+      "apiBaseUrl": ""
     },
     "locales": {
       "en": "./locales/en.json",

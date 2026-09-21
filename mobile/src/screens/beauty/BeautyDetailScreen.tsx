@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Card, Chip, Header, Icon, LoadingState, Screen } from '../../components/ui';
-import { useDeleteBeauty, useExplainIngredient } from '../../features/beauty';
+import { useBeautyItem, useDeleteBeauty, useExplainIngredient } from '../../features/beauty';
 import { useT } from '../../i18n';
 import { useDomainLabels } from '../../i18n/domain';
 import { colors, feedback, radius, spacing, typography } from '../../theme';
@@ -14,7 +14,8 @@ export function BeautyDetailScreen() {
   const { t: text } = useT();
   const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<BeautyStackParamList>>();
-  const { item } = useRoute<RouteProp<BeautyStackParamList, 'BeautyDetail'>>().params;
+  const { item: snapshot } = useRoute<RouteProp<BeautyStackParamList, 'BeautyDetail'>>().params;
+  const item = useBeautyItem(snapshot.id, snapshot).data;
   const deleteBeauty = useDeleteBeauty();
   const explain = useExplainIngredient();
   const [active, setActive] = useState<string | null>(null);

@@ -9,12 +9,10 @@ import { AppText, Button, Card, Chip, Header, Screen, TextField } from '../../co
 import { BEAUTY_CATEGORIES, BeautyCategory } from '../../api/types';
 import { useScanIngredients, useUpdateBeauty } from '../../features/beauty';
 import { useT } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
 import { spacing } from '../../theme';
 import type { BeautyStackParamList } from '../../navigation/types';
 
-function titleCase(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase();
-}
 
 function splitList(value: string): string[] {
   return value.split(',').map((s) => s.trim()).filter(Boolean);
@@ -22,6 +20,7 @@ function splitList(value: string): string[] {
 
 export function EditBeautyScreen() {
   const { t: text } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<BeautyStackParamList>>();
   const item = useRoute<RouteProp<BeautyStackParamList, 'EditBeauty'>>().params.item;
   const update = useUpdateBeauty();
@@ -110,7 +109,7 @@ export function EditBeautyScreen() {
           </AppText>
           <View style={styles.chips}>
             {BEAUTY_CATEGORIES.map((c) => (
-              <Chip key={c} label={titleCase(c)} selected={category === c} onPress={() => setCategory(c)} />
+              <Chip key={c} label={labels.beautyCategory(c)} selected={category === c} onPress={() => setCategory(c)} />
             ))}
           </View>
         </View>

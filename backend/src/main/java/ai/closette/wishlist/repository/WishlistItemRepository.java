@@ -12,4 +12,5 @@ public interface WishlistItemRepository extends JpaRepository<WishlistItem, UUID
     List<WishlistItem> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
     Optional<WishlistItem> findByIdAndUserId(UUID id, UUID userId);
+    boolean existsByImageKeyAndUserId(String imageKey, UUID userId);
 }

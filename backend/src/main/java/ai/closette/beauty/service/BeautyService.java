@@ -50,6 +50,8 @@ public class BeautyService {
 
     @Transactional
     public BeautyItemResponse create(UUID userId, CreateBeautyItemRequest req) {
+        ai.closette.storage.service.ImageRegistry.requireOwnedKey(userId, req.imageKey());
+        storage.claim(storage.beautyBucket(), userId, req.imageKey());
         BeautyItem item = new BeautyItem(userId);
         item.setBrand(trimToNull(req.brand()));
         item.setProductName(req.productName().trim());
@@ -117,7 +119,9 @@ public class BeautyService {
 
     @Transactional
     public void delete(UUID userId, UUID id) {
-        repository.delete(require(userId, id));
+        BeautyItem item = require(userId, id);
+        storage.release(storage.beautyBucket(), userId, item.getImageKey());
+        repository.delete(item);
     }
 
     /** FR-06: explain an ingredient in plain language (via the AI seam). */
@@ -139,7 +143,7 @@ public class BeautyService {
     private BeautyItemResponse toResponse(BeautyItem item) {
         // Uploaded photos live in MinIO (presigned); search-sourced products keep an external URL.
         String displayUrl = item.getImageKey() != null
-                ? storage.presignedUrl(storage.beautyBucket(), item.getImageKey())
+                ? storage.presignedOwnedUrl(storage.beautyBucket(), item.getUserId(), item.getImageKey())
                 : item.getImageUrl();
         return BeautyItemResponse.from(item, displayUrl);
     }

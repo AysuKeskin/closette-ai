@@ -7,6 +7,7 @@ import ai.closette.common.exception.MessageKeys;
 import ai.closette.storage.service.StorageService;
 import ai.closette.wardrobe.dto.AnalyzeResponse;
 import ai.closette.wardrobe.dto.CreateItemRequest;
+import ai.closette.wardrobe.dto.RetagSummary;
 import ai.closette.wardrobe.dto.UpdateItemRequest;
 import ai.closette.wardrobe.dto.WardrobeItemResponse;
 import ai.closette.wardrobe.model.WardrobeFilter;
@@ -31,15 +32,20 @@ public class WardrobeService {
 
     private static final Logger log = LoggerFactory.getLogger(WardrobeService.class);
 
+    /** Pieces re-catalogued per run. Bounded so one tap cannot spend a day's AI budget. */
+    private static final int RETAG_BATCH = 40;
+
     private final WardrobeItemRepository repository;
     private final StorageService storage;
+    private final ai.closette.auth.service.AiConsentService consent;
     private final AIService aiService;
     private final EmbeddingRepository embeddings;
 
     public WardrobeService(WardrobeItemRepository repository, StorageService storage,
-                           AIService aiService, EmbeddingRepository embeddings) {
+                           AIService aiService, EmbeddingRepository embeddings, ai.closette.auth.service.AiConsentService consent) {
         this.repository = repository;
         this.storage = storage;
+        this.consent = consent;
         this.aiService = aiService;
         this.embeddings = embeddings;
     }
@@ -54,9 +60,95 @@ public class WardrobeService {
         return new AnalyzeResponse(key, storage.presignedUrl(storage.wardrobeBucket(), key), analysis);
     }
 
+    /**
+     * Re-derives the catalogue tags of pieces already in the wardrobe.
+     *
+     * The tags decide what the stylist can reason about: an evening gown filed as a
+     * summer dress gets suggested for coffee, and a piece with no seasons cannot be
+     * kept out of the snow. Items catalogued before the vocabulary was pinned down
+     * carry exactly those gaps, and there is no way to fix them one by one.
+     *
+     * Derived from the name the user gave the piece rather than its photo: the text
+     * call costs a fraction of a vision call, which matters when the whole wardrobe
+     * goes through it, and the name is what the user themselves called it.
+     *
+     * Capped per run, oldest-touched first, so repeated runs walk the wardrobe. Only
+     * the AI-derived tags are touched — never the name, brand, size, colours or
+     * favourite, which are the user's own.
+     */
+    @Transactional
+    public RetagSummary retag(UUID userId) {
+        List<WardrobeItem> items = repository.findByUserIdOrderByUpdatedAtAsc(userId);
+        int total = items.size();
+        List<WardrobeItem> batch = items.size() > RETAG_BATCH ? items.subList(0, RETAG_BATCH) : items;
+
+        int updated = 0;
+        int failed = 0;
+        for (WardrobeItem item : batch) {
+            String description = describe(item);
+            if (description.isBlank()) {
+                continue;
+            }
+            ClothingAnalysis analysis = aiService.parseClothingText(description);
+            // Best-effort: the AI seam returns null when the service is down, and one
+            // unparseable name must not abandon the rest of the wardrobe.
+            if (analysis == null || "unknown".equalsIgnoreCase(analysis.category())) {
+                failed++;
+                log.warn("Re-catalogue produced nothing for item {} ({})", item.getId(), description);
+                continue;
+            }
+            if (applyTags(item, analysis)) {
+                updated++;
+            }
+        }
+        repository.saveAll(batch);
+        int remaining = Math.max(0, total - batch.size());
+        log.info("Re-catalogued {} of {} items for user {} ({} failed, {} left)",
+                updated, batch.size(), userId, failed, remaining);
+        return new RetagSummary(batch.size(), updated, failed, remaining);
+    }
+
+    /** What the piece is, in the user's own words. */
+    private static String describe(WardrobeItem item) {
+        StringBuilder text = new StringBuilder();
+        if (item.getName() != null) text.append(item.getName()).append(' ');
+        if (item.getSubcategory() != null) text.append(item.getSubcategory()).append(' ');
+        if (item.getColors() != null) text.append(String.join(" ", item.getColors()));
+        return text.toString().trim();
+    }
+
+    /** Overwrites only what the AI derives; returns whether anything actually moved. */
+    private static boolean applyTags(WardrobeItem item, ClothingAnalysis analysis) {
+        boolean changed = false;
+        if (analysis.styles() != null && !analysis.styles().isEmpty()
+                && !analysis.styles().equals(item.getStyles())) {
+            item.setStyles(analysis.styles());
+            changed = true;
+        }
+        if (analysis.seasons() != null && !analysis.seasons().isEmpty()
+                && !analysis.seasons().equals(item.getSeasons())) {
+            item.setSeasons(analysis.seasons());
+            changed = true;
+        }
+        // Pattern is filled in only when the piece has none. Unlike styles and seasons,
+        // it cannot be read off a name: asked about "Mavi gömlek" the parser answers
+        // "solid" whether or not the shirt is striped, and overwriting would replace
+        // what the photo actually showed with that guess.
+        if (item.getPattern() == null || item.getPattern().isBlank()) {
+            String pattern = trimToNull(analysis.pattern());
+            if (pattern != null) {
+                item.setPattern(pattern);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     /** Flow A step 2: persist the confirmed item. */
     @Transactional
     public WardrobeItemResponse create(UUID userId, CreateItemRequest req) {
+        ai.closette.storage.service.ImageRegistry.requireOwnedKey(userId, req.imageKey());
+        storage.claim(storage.wardrobeBucket(), userId, req.imageKey());
         WardrobeItem item = new WardrobeItem(userId);
         item.setName(req.name().trim());
         item.setCategory(req.category());
@@ -83,6 +175,7 @@ public class WardrobeService {
         try {
             byte[] bytes = storage.download(storage.wardrobeBucket(), item.getImageKey());
             if (bytes == null) return;
+            consent.require(item.getUserId());
             float[] vector = aiService.embedItem(bytes, item.getImageKey(), "image/jpeg");
             if (vector != null && vector.length > 0) {
                 embeddings.saveWardrobeEmbedding(item.getId(), vector);
@@ -153,7 +246,9 @@ public class WardrobeService {
 
     @Transactional
     public void delete(UUID userId, UUID id) {
-        repository.delete(require(userId, id));
+        WardrobeItem item = require(userId, id);
+        storage.release(storage.wardrobeBucket(), userId, item.getImageKey());
+        repository.delete(item);
     }
 
     // ---- helpers ----
@@ -164,7 +259,7 @@ public class WardrobeService {
     }
 
     private WardrobeItemResponse toResponse(WardrobeItem item) {
-        String url = storage.presignedUrl(storage.wardrobeBucket(), item.getImageKey());
+        String url = storage.presignedOwnedUrl(storage.wardrobeBucket(), item.getUserId(), item.getImageKey());
         return WardrobeItemResponse.from(item, url);
     }
 

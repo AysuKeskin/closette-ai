@@ -1,11 +1,14 @@
 package ai.closette.wardrobe.service;
 
+import ai.closette.ai.dto.ClothingAnalysis;
+import ai.closette.ai.service.AIService;
 import ai.closette.auth.service.AuthService;
 import ai.closette.auth.dto.RegisterRequest;
 import ai.closette.common.exception.ApiException;
 import ai.closette.common.exception.ErrorCode;
 import ai.closette.support.TestData;
 import ai.closette.wardrobe.dto.CreateItemRequest;
+import ai.closette.wardrobe.dto.RetagSummary;
 import ai.closette.wardrobe.dto.UpdateItemRequest;
 import ai.closette.wardrobe.dto.WardrobeItemResponse;
 import ai.closette.wardrobe.model.ClothingCategory;
@@ -13,6 +16,7 @@ import ai.closette.wardrobe.model.WardrobeFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
@@ -20,10 +24,15 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 /**
  * Exercises the wardrobe add + list + filter path end-to-end against the H2 DB
  * (the persistence half of Flow A; the AI/storage calls happen in the analyze step).
+ *
+ * The AI seam is mocked: re-cataloguing calls it once per item, and without this the
+ * suite would reach whatever provider the developer happens to have configured.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -36,6 +45,9 @@ class WardrobeServiceTest {
 
     @Autowired
     WardrobeService wardrobeService;
+
+    @MockitoBean
+    AIService aiService;
 
     private UUID newUser() {
         return TestData.newUser(authService);
@@ -248,5 +260,92 @@ class WardrobeServiceTest {
         assertThatThrownBy(action::run)
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND));
+    }
+
+    @Test
+    void reCataloguingFillsTheTagsAndLeavesTheUsersOwnFieldsAlone() {
+        UUID userId = TestData.newUser(authService);
+        UUID id = wardrobeService.create(userId, new CreateItemRequest(
+                "Kalın yün kazak", ClothingCategory.TOPS, "kazak", List.of("grey"),
+                null, List.of(), List.of(), "Zara", "M", null, true)).id();
+        when(aiService.parseClothingText(any())).thenReturn(new ClothingAnalysis(
+                "top", "kazak", List.of("grey"), List.of(), "solid", List.of("casual"),
+                List.of("fall", "winter"), 0.8));
+
+        RetagSummary summary = wardrobeService.retag(userId);
+
+        assertThat(summary.examined()).isEqualTo(1);
+        assertThat(summary.updated()).isEqualTo(1);
+        assertThat(summary.remaining()).isZero();
+
+        WardrobeItemResponse item = wardrobeService.get(userId, id);
+        assertThat(item.seasons()).containsExactly("fall", "winter");
+        assertThat(item.styles()).containsExactly("casual");
+        // The user's own fields are not the AI's to rewrite.
+        assertThat(item.name()).isEqualTo("Kalın yün kazak");
+        assertThat(item.brand()).isEqualTo("Zara");
+        assertThat(item.size()).isEqualTo("M");
+        assertThat(item.favorite()).isTrue();
+    }
+
+    @Test
+    void reCataloguingSkipsAnItemTheModelCannotRead() {
+        UUID userId = TestData.newUser(authService);
+        wardrobeService.create(userId,
+                TestData.item("qwerty", ClothingCategory.TOPS, List.of(), List.of()));
+        when(aiService.parseClothingText(any())).thenReturn(new ClothingAnalysis(
+                "unknown", "", List.of(), List.of(), "", List.of(), List.of(), 0.0));
+
+        RetagSummary summary = wardrobeService.retag(userId);
+
+        assertThat(summary.failed()).isEqualTo(1);
+        assertThat(summary.updated()).isZero();
+    }
+
+    @Test
+    void reCataloguingOnlyEverTouchesTheCallersOwnWardrobe() {
+        UUID mine = TestData.newUser(authService);
+        UUID theirs = TestData.newUser(authService);
+        wardrobeService.create(theirs,
+                TestData.item("Their coat", ClothingCategory.OUTERWEAR, List.of("black"), List.of()));
+        when(aiService.parseClothingText(any())).thenReturn(new ClothingAnalysis(
+                "top", "x", List.of(), List.of(), "solid", List.of("casual"), List.of("fall"), 0.8));
+
+        assertThat(wardrobeService.retag(mine).examined()).isZero();
+    }
+
+    @Test
+    void reCataloguingNeverOverwritesAPatternTheNameCannotKnow() {
+        // The parser answers "solid" for any name that does not mention a pattern, so
+        // overwriting replaced what the photo showed with a guess.
+        UUID userId = TestData.newUser(authService);
+        UUID id = wardrobeService.create(userId, new CreateItemRequest(
+                "Mavi gömlek", ClothingCategory.TOPS, "gömlek", List.of("blue"),
+                "striped", List.of(), List.of(), null, null, null, false)).id();
+        when(aiService.parseClothingText(any())).thenReturn(new ClothingAnalysis(
+                "top", "gömlek", List.of("blue"), List.of(), "solid", List.of("classic"),
+                List.of("spring", "summer"), 0.8));
+
+        wardrobeService.retag(userId);
+
+        WardrobeItemResponse item = wardrobeService.get(userId, id);
+        assertThat(item.pattern()).isEqualTo("striped");
+        // The tags that a name can genuinely speak to are still refreshed.
+        assertThat(item.seasons()).containsExactly("spring", "summer");
+    }
+
+    @Test
+    void reCataloguingFillsAMissingPattern() {
+        UUID userId = TestData.newUser(authService);
+        UUID id = wardrobeService.create(userId, new CreateItemRequest(
+                "Çizgili gömlek", ClothingCategory.TOPS, "gömlek", List.of("blue"),
+                null, List.of(), List.of(), null, null, null, false)).id();
+        when(aiService.parseClothingText(any())).thenReturn(new ClothingAnalysis(
+                "top", "gömlek", List.of("blue"), List.of(), "striped", List.of("classic"),
+                List.of("spring"), 0.8));
+
+        wardrobeService.retag(userId);
+
+        assertThat(wardrobeService.get(userId, id).pattern()).isEqualTo("striped");
     }
 }

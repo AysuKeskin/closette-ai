@@ -7,15 +7,14 @@ import { AppText, Button, Header, Icon, LoadingState, Screen, TextField } from '
 import type { BeautyProductCandidate } from '../../api/types';
 import { useBeautySearch } from '../../features/beauty';
 import { useT } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
 import { colors, feedback, radius, spacing } from '../../theme';
 import type { BeautyStackParamList } from '../../navigation/types';
 
-function titleCase(v: string): string {
-  return v.charAt(0) + v.slice(1).toLowerCase();
-}
 
 export function BeautySearchScreen() {
   const { t: text } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<BeautyStackParamList>>();
   const search = useBeautySearch();
   const [q, setQ] = useState('');
@@ -72,7 +71,7 @@ export function BeautySearchScreen() {
                     {item.productName}
                   </AppText>
                   <AppText variant="caption" tone="muted">
-                    {[item.brand, titleCase(item.category)].filter(Boolean).join(' · ')}
+                    {[item.brand, labels.beautyCategory(item.category)].filter(Boolean).join(' · ')}
                   </AppText>
                 </View>
                 <AppText style={styles.chevron}>›</AppText>

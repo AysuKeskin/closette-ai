@@ -28,31 +28,26 @@ public class UserService {
     private final WardrobeItemRepository wardrobeRepository;
     private final BeautyItemRepository beautyRepository;
     private final StorageService storage;
+    private final ai.closette.auth.service.SessionService sessions;
 
     public UserService(UserRepository userRepository, StylePreferenceRepository stylePreferenceRepository,
                        WardrobeItemRepository wardrobeRepository, BeautyItemRepository beautyRepository,
-                       StorageService storage) {
+                       StorageService storage, ai.closette.auth.service.SessionService sessions) {
         this.userRepository = userRepository;
         this.stylePreferenceRepository = stylePreferenceRepository;
         this.wardrobeRepository = wardrobeRepository;
         this.beautyRepository = beautyRepository;
         this.storage = storage;
+        this.sessions = sessions;
     }
 
-    /**
-     * Permanently delete the account and everything owned by it. All user-scoped tables cascade
-     * from the users row (ON DELETE CASCADE), so we only delete the user; stored images have no FK,
-     * so we clean those from object storage first (best-effort).
-     */
+    /** Object deletion is queued in the same transaction and survives removal of the user. */
     @Transactional
     public void deleteAccount(UUID userId) {
-        User user = requireUser(userId);
-        for (WardrobeItem item : wardrobeRepository.findByUserIdOrderByCreatedAtDesc(userId)) {
-            storage.delete(storage.wardrobeBucket(), item.getImageKey());
-        }
-        for (BeautyItem item : beautyRepository.findByUserIdOrderByCreatedAtDesc(userId)) {
-            storage.delete(storage.beautyBucket(), item.getImageKey());
-        }
+        User user = userRepository.lockById(userId)
+                .orElseThrow(() -> ApiException.notFound(MessageKeys.USER_NOT_FOUND));
+        storage.releaseUser(userId);
+        sessions.revokeAll(userId);
         userRepository.delete(user);
     }
 

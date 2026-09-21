@@ -28,10 +28,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -41,6 +44,10 @@ import java.util.UUID;
  */
 @Service
 public class OutfitService {
+
+    /** How many owned pieces the stylist sees. Bounded to keep the prompt affordable. */
+    private static final int STYLIST_CONTEXT_LIMIT = 40;
+
 
     private final OutfitRepository outfitRepository;
     private final OutfitFeedbackRepository feedbackRepository;
@@ -80,9 +87,9 @@ public class OutfitService {
 
         String occasion = occasionOf(request);
 
-        // Retrieve up to 40 owned items as the LLM's context, then let it compose.
-        List<WardrobeItem> candidates = all.size() > 40 ? all.subList(0, 40) : all;
-        OutfitSuggestion ai = aiService.generateOutfit(occasion, toCandidates(candidates), preferencesFor(userId));
+        List<WardrobeItem> candidates = shortlist(all);
+        OutfitSuggestion ai = aiService.generateOutfit(
+                occasion, toCandidates(candidates), preferencesFor(userId), request.excludeItemIds());
         if (ai != null) {
             boolean pickedSomething = ai.itemIds() != null && !ai.itemIds().isEmpty();
             Map<String, WardrobeItem> byId = new LinkedHashMap<>();
@@ -98,7 +105,8 @@ public class OutfitService {
                     }
                 }
             }
-            if (!look.isEmpty()) {
+            look = wearable(look, ai.formality(), ai.season(), all);
+            if (hasMainGarment(look)) {
                 String title = notBlank(ai.title()) ? ai.title().trim()
                         : messages.get(MessageKeys.OUTFIT_DEFAULT_TITLE);
                 String rationale = notBlank(ai.rationale()) ? ai.rationale().trim()
@@ -117,7 +125,147 @@ public class OutfitService {
         }
 
         // AI unavailable, or it returned only unusable ids: best-effort deterministic composer.
-        return ruleBasedLook(all, occasion);
+        // Same gown rule as above — otherwise dropping it from the model's pick would
+        // just hand it back through this door.
+        boolean blackTie = ai != null && "formal".equalsIgnoreCase(ai.formality());
+        List<WardrobeItem> wearableStock = blackTie
+                ? all
+                : all.stream().filter(i -> !isGown(i)).toList();
+        return ruleBasedLook(wearableStock.isEmpty() ? all : wearableStock, occasion);
+    }
+
+    /**
+     * Enforces what a wearable outfit is, on the way back from the model.
+     *
+     * The prompt states these rules, but a prompt is a request and this is a
+     * guarantee: nobody wears a dress over trousers, or two pairs of shoes. Kept
+     * as a repair rather than a rejection, so a mostly-good look still reaches the
+     * user instead of falling back to the rule-based composer.
+     */
+    private static List<WardrobeItem> wearable(List<WardrobeItem> look, String formality,
+                                               String season, List<WardrobeItem> wardrobe) {
+        boolean blackTie = "formal".equalsIgnoreCase(formality);
+        List<WardrobeItem> out = new ArrayList<>();
+        boolean hasDress = look.stream().anyMatch(i -> i.getCategory() == ClothingCategory.DRESSES);
+        Set<ClothingCategory> used = new HashSet<>();
+        for (WardrobeItem item : look) {
+            ClothingCategory category = item.getCategory();
+            if (hasDress && (category == ClothingCategory.TOPS || category == ClothingCategory.BOTTOMS)) {
+                continue;
+            }
+            if (!blackTie && isGown(item)) {
+                continue;
+            }
+            if (used.add(category)) {
+                out.add(item);
+            }
+        }
+        if (!out.isEmpty() && !used.contains(ClothingCategory.SHOES)) {
+            List<WardrobeItem> shoes = wardrobe.stream()
+                    .filter(i -> i.getCategory() == ClothingCategory.SHOES)
+                    .filter(i -> blackTie || !isGown(i))
+                    .toList();
+            // Only a pair that positively suits the occasion. Falling back to any pair
+            // at all is how boots ended up on a beach day: an incomplete look is a
+            // smaller failure than an absurd one, and the stylist usually picks shoes
+            // itself — this is a safety net, not the main path.
+            shoes.stream()
+                    .filter(i -> suitsFormality(i, formality))
+                    .filter(i -> suitsSeason(i, season))
+                    .findFirst()
+                    .ifPresent(out::add);
+        }
+        return out;
+    }
+
+    /**
+     * Whether anything is actually being worn, rather than accessorised.
+     *
+     * Stripping a gown out of a too-casual occasion can leave nothing but the shoes,
+     * and a pair of heels on its own is not a look. When that happens the rule-based
+     * composer builds something wearable instead.
+     */
+    private static boolean hasMainGarment(List<WardrobeItem> look) {
+        return look.stream().anyMatch(i -> i.getCategory() == ClothingCategory.DRESSES
+                || i.getCategory() == ClothingCategory.TOPS
+                || i.getCategory() == ClothingCategory.BOTTOMS);
+    }
+
+    /** Style words that read as dressed-up, and the ones that read as relaxed. */
+    private static final Set<String> DRESSY =
+            Set.of("elegant", "classic", "timeless", "chic", "formal", "minimal", "romantic");
+    private static final Set<String> RELAXED =
+            Set.of("casual", "sporty", "boho", "streetwear", "edgy");
+
+    /**
+     * Whether the piece belongs in the season the occasion falls in.
+     *
+     * Formality alone cannot separate these: an edgy leather boot is a perfectly
+     * good casual shoe, and still the wrong thing to hand someone for a beach day.
+     * A piece with no seasons recorded is allowed through rather than excluded —
+     * absent data is not evidence against it.
+     */
+    private static boolean suitsSeason(WardrobeItem item, String season) {
+        if (season == null || season.isBlank()
+                || item.getSeasons() == null || item.getSeasons().isEmpty()) {
+            return true;
+        }
+        return item.getSeasons().stream().anyMatch(s -> s.equalsIgnoreCase(season));
+    }
+
+    private static boolean suitsFormality(WardrobeItem item, String formality) {
+        if (item.getStyles() == null || item.getStyles().isEmpty()) {
+            return false;
+        }
+        Set<String> wanted = "casual".equalsIgnoreCase(formality) ? RELAXED : DRESSY;
+        return item.getStyles().stream().anyMatch(st -> wanted.contains(st.toLowerCase(Locale.ROOT)));
+    }
+
+    /**
+     * An evening gown, by the style word it was catalogued with.
+     *
+     * The stylist is told to keep these for genuinely special events and mostly does,
+     * but "mostly" is how an abiye ends up suggested for a weeknight dinner. Whether
+     * the occasion is special enough is the model's call; keeping the gown out of
+     * everything else is ours.
+     */
+    private static boolean isGown(WardrobeItem item) {
+        return item.getStyles() != null && item.getStyles().stream().anyMatch("formal"::equalsIgnoreCase);
+    }
+
+    /**
+     * The wardrobe the stylist gets to see, capped so the prompt stays affordable.
+     *
+     * Taking the newest N is what a cap must not do: past the cap a user's older
+     * pieces become invisible, and the same recent handful comes back every time.
+     * Dealing round-robin by category instead keeps every category represented, so
+     * there are always shoes and a coat to reach for, and the cut falls on the
+     * oldest of an over-represented category rather than on whole categories.
+     */
+    private static List<WardrobeItem> shortlist(List<WardrobeItem> all) {
+        if (all.size() <= STYLIST_CONTEXT_LIMIT) {
+            return all;
+        }
+        Map<ClothingCategory, List<WardrobeItem>> byCategory = new LinkedHashMap<>();
+        for (WardrobeItem item : all) {
+            byCategory.computeIfAbsent(item.getCategory(), c -> new ArrayList<>()).add(item);
+        }
+        List<WardrobeItem> picked = new ArrayList<>(STYLIST_CONTEXT_LIMIT);
+        int round = 0;
+        while (picked.size() < STYLIST_CONTEXT_LIMIT) {
+            boolean tookAny = false;
+            for (List<WardrobeItem> items : byCategory.values()) {
+                if (round < items.size() && picked.size() < STYLIST_CONTEXT_LIMIT) {
+                    picked.add(items.get(round));
+                    tookAny = true;
+                }
+            }
+            if (!tookAny) {
+                break;
+            }
+            round++;
+        }
+        return picked;
     }
 
     private GeneratedLook ruleBasedLook(List<WardrobeItem> all, String occasion) {

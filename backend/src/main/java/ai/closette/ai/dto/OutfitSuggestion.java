@@ -6,6 +6,10 @@ import java.util.List;
 public record OutfitSuggestion(
         List<String> itemIds,
         String title,
-        String rationale
+        String rationale,
+        /** How dressy the stylist judged the occasion: casual | smart | formal. */
+        String formality,
+        /** The season it judged the occasion to fall in: spring | summer | fall | winter. */
+        String season
 ) {
 }

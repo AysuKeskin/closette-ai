@@ -1,7 +1,7 @@
 package ai.closette.common.ratelimit;
 
+import ai.closette.auth.dto.AuthResponse;
 import ai.closette.auth.service.AuthService;
-import ai.closette.auth.service.JwtService;
 import ai.closette.support.TestData;
 import ai.closette.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -13,8 +13,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.UUID;
 
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -53,13 +51,10 @@ class RateLimitEnforcementTest {
     @Autowired
     UserRepository userRepository;
 
-    @Autowired
-    JwtService jwtService;
-
     private String tokenForVerifiedUser() {
-        UUID userId = TestData.newUser(authService);
-        TestData.markEmailVerified(userRepository, userId);
-        return jwtService.generateAccessToken(userId);
+        AuthResponse auth = TestData.register(authService);
+        TestData.markEmailVerified(userRepository, auth.user().id());
+        return auth.accessToken();
     }
 
     @Test

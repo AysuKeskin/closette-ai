@@ -32,10 +32,17 @@ public class StorageService {
 
     private final MinioClient client;
     private final ClosetteProperties props;
+    private final ImageRegistry registry;
+    private final MinioClient publicClient;
 
-    public StorageService(MinioClient client, ClosetteProperties props) {
+    public StorageService(MinioClient client, ClosetteProperties props, ImageRegistry registry) {
         this.client = client;
         this.props = props;
+        this.registry = registry;
+        var settings = props.getStorage();
+        this.publicClient = settings.getPublicEndpoint() == null || settings.getPublicEndpoint().isBlank() ? client
+                : MinioClient.builder().endpoint(settings.getPublicEndpoint()).region(settings.getRegion())
+                    .credentials(settings.getAccessKey(), settings.getSecretKey()).build();
     }
 
     /**
@@ -44,6 +51,7 @@ public class StorageService {
     public String upload(String bucket, UUID userId, byte[] bytes, String contentType, String originalName) {
         String ext = extensionOf(originalName);
         String key = userId + "/" + UUID.randomUUID() + ext;
+        registry.prepare(userId, bucket, key);
         try (ByteArrayInputStream in = new ByteArrayInputStream(bytes)) {
             client.putObject(PutObjectArgs.builder()
                     .bucket(bucket)
@@ -58,13 +66,15 @@ public class StorageService {
         }
     }
 
-    /** Best-effort delete of a stored object (e.g. when a user deletes their account). Never throws. */
-    public void delete(String bucket, String key) {
-        if (key == null || key.isBlank()) return;
+    /** False leaves the durable cleanup job queued for retry. */
+    public boolean delete(String bucket, String key) {
+        if (key == null || key.isBlank()) return true;
         try {
             client.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(key).build());
+            return true;
         } catch (Exception e) {
             log.warn("Failed to delete object {}/{}", bucket, key, e);
+            return false;
         }
     }
 
@@ -90,7 +100,7 @@ public class StorageService {
             return null;
         }
         try {
-            return client.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+            return publicClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
                     .bucket(bucket)
                     .object(key)
@@ -100,6 +110,14 @@ public class StorageService {
             log.warn("Failed to presign object {}/{}", bucket, key, e);
             return null;
         }
+    }
+
+    public void claim(String bucket, UUID userId, String key) { registry.claim(userId, bucket, key); }
+    public void release(String bucket, UUID userId, String key) { registry.release(userId, bucket, key); }
+    public void releaseUser(UUID userId) { registry.releaseUser(userId); }
+
+    public String presignedOwnedUrl(String bucket, UUID userId, String key) {
+        return ImageRegistry.isOwnedKey(userId, key) ? presignedUrl(bucket, key) : null;
     }
 
     public String wardrobeBucket() {

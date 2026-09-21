@@ -25,6 +25,7 @@ export type WardrobeStackParamList = {
   AddItem: undefined;
   ConfirmItem: { analysis: AnalyzeResponse; imageUri: string };
   ItemDetail: { item: WardrobeItem };
+  EditItem: { item: WardrobeItem };
 };
 
 export type BeautyStackParamList = {

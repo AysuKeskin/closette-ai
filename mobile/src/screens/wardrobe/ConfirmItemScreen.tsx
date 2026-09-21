@@ -8,6 +8,7 @@ import { AppText, Button, Card, Chip, Header, Screen, TextField } from '../../co
 import { CLOTHING_CATEGORIES, ClothingCategory } from '../../api/types';
 import { useCreateItem } from '../../features/wardrobe';
 import { useT } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
 import { colors, radius, spacing } from '../../theme';
 import type { WardrobeStackParamList } from '../../navigation/types';
 
@@ -34,25 +35,29 @@ function toCategory(raw: string): ClothingCategory {
   return CATEGORY_MAP[raw?.toLowerCase()] ?? 'TOPS';
 }
 
-function titleCase(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase();
+function titleCase(value: string, language: string): string {
+  // The subcategory arrives in the user's language now: "ipek bluz" must
+  // capitalise to "İpek bluz", not "Ipek bluz".
+  const locale = language === 'tr' ? 'tr-TR' : 'en-US';
+  return value.charAt(0).toLocaleUpperCase(locale) + value.slice(1).toLocaleLowerCase(locale);
 }
 
 export function ConfirmItemScreen() {
-  const { t: text } = useT();
+  const { t: text, language } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<WardrobeStackParamList>>();
   const route = useRoute<RouteProp<WardrobeStackParamList, 'ConfirmItem'>>();
   const { analysis: response, imageUri } = route.params;
   const ai = response.analysis;
   const createItem = useCreateItem();
 
-  const [name, setName] = useState(ai.subcategory ? titleCase(ai.subcategory) : '');
+  const [name, setName] = useState(ai.subcategory ? titleCase(ai.subcategory, language) : '');
   const [category, setCategory] = useState<ClothingCategory>(toCategory(ai.category));
   const [subcategory, setSubcategory] = useState(ai.subcategory ?? '');
-  const [colors_, setColors] = useState((ai.colors ?? []).join(', '));
-  const [pattern, setPattern] = useState(ai.pattern ?? '');
-  const [styles_, setStyles] = useState((ai.styles ?? []).join(', '));
-  const [seasons, setSeasons] = useState((ai.seasons ?? []).join(', '));
+  const [colors_, setColors] = useState((ai.colors ?? []).map(labels.color).join(', '));
+  const [pattern, setPattern] = useState(labels.pattern(ai.pattern ?? ''));
+  const [styles_, setStyles] = useState((ai.styles ?? []).map(labels.style).join(', '));
+  const [seasons, setSeasons] = useState((ai.seasons ?? []).map(labels.season).join(', '));
   const [brand, setBrand] = useState('');
   const [size, setSize] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -70,10 +75,10 @@ export function ConfirmItemScreen() {
         name: name.trim(),
         category,
         subcategory: subcategory.trim() || undefined,
-        colors: splitList(colors_),
-        pattern: pattern.trim() || undefined,
-        styles: splitList(styles_),
-        seasons: splitList(seasons),
+        colors: splitList(colors_).map(labels.canonical.color),
+        pattern: pattern.trim() ? labels.canonical.pattern(pattern) : undefined,
+        styles: splitList(styles_).map(labels.canonical.style),
+        seasons: splitList(seasons).map(labels.canonical.season),
         brand: brand.trim() || undefined,
         size: size.trim() || undefined,
         imageKey: response.imageKey || undefined,
@@ -99,7 +104,7 @@ export function ConfirmItemScreen() {
       {lowConfidence ? (
         <Card style={styles.confidence}>
           <AppText variant="label" tone="brand">
-            ✨ We think this is a {ai.subcategory || 'item'}. Is that right? Feel free to fix anything.
+            {text('confirm.lowConfidence', { noun: ai.subcategory || text('confirm.thisItem') })}
           </AppText>
         </Card>
       ) : null}
@@ -113,7 +118,7 @@ export function ConfirmItemScreen() {
             {ai.color_details.map((c) => (
               <View key={`${c.hex}-${c.name}`} style={styles.swatch}>
                 <View style={[styles.swatchDot, { backgroundColor: c.hex }]} />
-                <AppText variant="caption">{`${c.name} · ${c.percentage}%`}</AppText>
+                <AppText variant="caption">{`${labels.color(c.name)} · ${c.percentage}%`}</AppText>
               </View>
             ))}
           </View>
@@ -129,14 +134,14 @@ export function ConfirmItemScreen() {
           </AppText>
           <View style={styles.chips}>
             {CLOTHING_CATEGORIES.map((c) => (
-              <Chip key={c} label={titleCase(c)} selected={category === c} onPress={() => setCategory(c)} />
+              <Chip key={c} label={labels.clothingCategory(c)} selected={category === c} onPress={() => setCategory(c)} />
             ))}
           </View>
         </View>
 
         <TextField label={text('confirm.subcategory')} value={subcategory} onChangeText={setSubcategory} placeholder={text('confirm.subcategoryPlaceholder')} />
         <TextField label={text('confirm.colors')} value={colors_} onChangeText={setColors} placeholder={text('confirm.colorsPlaceholder')} hint={text('confirm.commaHint')} />
-        <TextField label={text('confirm.pattern')} value={pattern} onChangeText={setPattern} placeholder="solid" />
+        <TextField label={text('confirm.pattern')} value={pattern} onChangeText={setPattern} placeholder={text('confirm.patternPlaceholder')} />
         <TextField label={text('confirm.styles')} value={styles_} onChangeText={setStyles} placeholder={text('confirm.stylesPlaceholder')} hint={text('confirm.commaHint')} />
         <TextField label={text('confirm.seasons')} value={seasons} onChangeText={setSeasons} placeholder={text('confirm.seasonsPlaceholder')} hint={text('confirm.commaHint')} />
         <TextField label={text('confirm.brandOptional')} value={brand} onChangeText={setBrand} />

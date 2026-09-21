@@ -5,8 +5,8 @@ import { queryKeys } from './queryClient';
 
 export function useGenerateLook() {
   return useMutation({
-    mutationFn: (args: { prompt: string; occasion?: string }) =>
-      outfitApi.generate(args.prompt, args.occasion),
+    mutationFn: (args: { prompt: string; occasion?: string; excludeItemIds?: string[] }) =>
+      outfitApi.generate(args.prompt, args.occasion, args.excludeItemIds),
   });
 }
 

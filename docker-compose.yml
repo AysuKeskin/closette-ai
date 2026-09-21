@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-closette}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-closette}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - closette_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +21,7 @@ services:
     image: redis:7-alpine
     container_name: closette-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -39,8 +39,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-closette}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-closette123}
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # web console
+      - "127.0.0.1:9000:9000"   # S3 API
+      - "127.0.0.1:9001:9001"   # web console
     volumes:
       - closette_miniodata:/data
     healthcheck:
@@ -121,6 +121,10 @@ services:
       MINIO_BUCKET_WARDROBE: ${MINIO_BUCKET_WARDROBE:-wardrobe}
       MINIO_BUCKET_BEAUTY: ${MINIO_BUCKET_BEAUTY:-beauty}
       AI_SERVICE_BASE_URL: http://ai-service:8000
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_PRIVACY_URL: ${AI_PRIVACY_URL:-}
+      AI_PROCESSING_DETAILS: ${AI_PROCESSING_DETAILS:-Local development}
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
       JWT_SECRET: ${JWT_SECRET:?set a real JWT_SECRET in .env — the app refuses to start without one}
       # Without these the container falls back to provider=log and silently sends
       # nothing: backend/.env is a local-development file and is not in the image.
@@ -130,7 +134,7 @@ services:
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-60}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "127.0.0.1:${SERVER_PORT:-8080}:8080"
 
 volumes:
   closette_pgdata:

@@ -19,7 +19,7 @@ import {
 } from '../../components/ui';
 import { BuyVerdict, ShouldIBuyResult } from '../../api/types';
 import { useShouldIBuy, useShouldIBuyPhoto } from '../../features/recommendation';
-import { openVerifyEmail } from '../../navigation/navigationRef';
+import { openVerifyEmail, openItemDetail } from '../../navigation/navigationRef';
 import { useT, type TranslationKey } from '../../i18n';
 import { useDomainLabels } from '../../i18n/domain';
 import { colors, feedback, radius, spacing } from '../../theme';
@@ -224,6 +224,7 @@ export function ShopAssistantScreen() {
                     title={item.name}
                     subtitle={labels.clothingCategory(item.category)}
                     imageUrl={item.imageUrl}
+                    onPress={() => openItemDetail(item)}
                   />
                 )}
               />

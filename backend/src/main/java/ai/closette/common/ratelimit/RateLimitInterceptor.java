@@ -24,10 +24,12 @@ import java.util.UUID;
 public class RateLimitInterceptor implements HandlerInterceptor {
 
     private final RateLimiter limiter;
+    private final ai.closette.auth.service.AiConsentService consent;
     private final UserRepository userRepository;
 
-    public RateLimitInterceptor(RateLimiter limiter, UserRepository userRepository) {
+    public RateLimitInterceptor(RateLimiter limiter, UserRepository userRepository, ai.closette.auth.service.AiConsentService consent) {
         this.limiter = limiter;
+        this.consent = consent;
         this.userRepository = userRepository;
     }
 
@@ -43,6 +45,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         String what = request.getMethod() + " " + request.getRequestURI();
 
         UUID userId = currentUserId();
+        if (limit.bucket() == RateLimitBucket.AI && userId != null) consent.require(userId);
         Window byUser = userWindow(limit.bucket(), userId);
         if (byUser != null) {
             charge(limit, "user", userId.toString(), byUser, what, response);
@@ -103,16 +106,9 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         return userRepository.findById(userId).map(user -> user.isEmailVerified()).orElse(false);
     }
 
-    /**
-     * Behind a proxy the real client sits at the front of {@code X-Forwarded-For}.
-     * Trusting it unconditionally lets a client pick its own bucket, so this must
-     * be paired with a proxy that overwrites the header rather than appending to it.
-     */
+    // Forwarded headers are untrusted input. The private reverse proxy may replace
+    // the remote address through the container's explicitly trusted proxy support.
     private String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
         return request.getRemoteAddr();
     }
 }

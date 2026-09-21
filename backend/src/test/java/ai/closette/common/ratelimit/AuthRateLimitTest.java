@@ -74,6 +74,21 @@ class AuthRateLimitTest {
     }
 
     @Test
+    void forgedForwardedHeadersCannotResetTheIpBudget() throws Exception {
+        for (int i = 0; i < 2; i++) {
+            mvcFromSamePeer(i).andExpect(status().isOk());
+        }
+        mvcFromSamePeer(3).andExpect(status().isTooManyRequests());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions mvcFromSamePeer(int forgedIp) throws Exception {
+        return mockMvc.perform(post("/api/auth/register")
+                .with(request -> { request.setRemoteAddr("198.51.100.82"); return request; })
+                .header("X-Forwarded-For", "203.0.113." + forgedIp)
+                .contentType(MediaType.APPLICATION_JSON).content(registration()));
+    }
+
+    @Test
     void guessingAtOneEmailIsCutOffEvenWithRoomOnTheIp() throws Exception {
         // The IP budget here is huge on purpose: what stops this is the per-email
         // limit, which is the one an attacker concentrating on one victim hits.

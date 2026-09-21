@@ -129,14 +129,56 @@ const COLOR_SEASON_DESC: Record<string, Record<Language, string>> = {
 /** The onboarding "dressing up" answers, stored by their English wording. */
 const DRESS_UP: Record<string, Record<Language, string>> = {
   'a pretty dress': { en: 'A pretty dress', tr: 'Şık bir elbise' },
-  'tailored pieces': { en: 'Tailored pieces', tr: 'Kesimli parçalar' },
-  'jeans + a nice top': { en: 'Jeans + a nice top', tr: 'Kot + güzel bir üst' },
+  'tailored pieces': { en: 'Tailored pieces', tr: 'Blazer ve pantolon' },
+  'jeans + a nice top': { en: 'Jeans + a nice top', tr: 'Kot ve güzel bir üst' },
 };
 
 function titleCase(value: string, language: Language = 'en'): string {
   // Turkish's dotted capital: "ipek" must become "İpek", not "Ipek".
   const locale = language === 'tr' ? 'tr-TR' : 'en-US';
   return value.charAt(0).toLocaleUpperCase(locale) + value.slice(1);
+}
+
+/**
+ * Label → stored value, for the one screen where the user edits catalogue values
+ * directly. They read and type Turkish; the item is saved in English, because a
+ * Turkish wardrobe has to stay comparable to an English one.
+ *
+ * Unrecognised input is kept lowercased as typed — the AI invents values outside
+ * these tables too, and refusing the user's own word would lose it.
+ */
+const REVERSE = new Map<Record<string, Record<Language, string>>, Map<string, string>>();
+
+/**
+ * Both locales' lowercasings, because they disagree: "Ivory" is "ivory" in
+ * English and "ıvory" in Turkish. Indexing one and looking up the other silently
+ * misses, so every spelling a user could arrive at maps to the same entry.
+ */
+function keysFor(label: string): string[] {
+  const trimmed = label.trim();
+  return [trimmed.toLocaleLowerCase('en-US'), trimmed.toLocaleLowerCase('tr-TR')];
+}
+
+function reverse(
+  table: Record<string, Record<Language, string>>,
+  label: string,
+  language: Language,
+): string {
+  let index = REVERSE.get(table);
+  if (!index) {
+    index = new Map();
+    for (const [canonical, names] of Object.entries(table)) {
+      for (const spelling of [canonical, ...Object.values(names)]) {
+        for (const key of keysFor(spelling)) index.set(key, canonical);
+      }
+    }
+    REVERSE.set(table, index);
+  }
+  for (const key of keysFor(label)) {
+    const canonical = index.get(key);
+    if (canonical) return canonical;
+  }
+  return label.trim().toLocaleLowerCase(language === 'tr' ? 'tr-TR' : 'en-US');
 }
 
 function look(
@@ -161,6 +203,13 @@ export function useDomainLabels() {
     colorSeason: (value: string) => look(COLOR_SEASON, value, language),
     colorSeasonDesc: (value: string) => look(COLOR_SEASON_DESC, value, language),
     dressUp: (value: string) => look(DRESS_UP, value, language),
+    /** The inverse of the label functions above, for editable catalogue fields. */
+    canonical: {
+      color: (label: string) => reverse(COLOR, label, language),
+      style: (label: string) => reverse(STYLE, label, language),
+      season: (label: string) => reverse(SEASON, label, language),
+      pattern: (label: string) => reverse(PATTERN, label, language),
+    },
     /** An item's chips mix colours, styles and seasons — try each vocabulary. */
     tag: (value: string) => {
       const key = value.trim().toLowerCase();

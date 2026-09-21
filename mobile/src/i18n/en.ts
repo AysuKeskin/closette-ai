@@ -6,7 +6,20 @@
  * Values may contain {placeholders}; see `t()` in ./index.
  */
 export const en = {
+  consent: {
+    title: 'Share data with AI?',
+    body: 'To use AI features, Closette sends the photos or descriptions you submit, relevant wardrobe details and style preferences to {provider}. They are used to catalogue items and suggest outfits or purchases.\n\n{details}\n\nYou can decline and continue browsing your collection, or withdraw permission in Profile.',
+    accept: 'Allow AI processing',
+    declined: 'AI data sharing was not approved.',
+    withdraw: 'Withdraw AI permission',
+    withdrawHint: 'Ask again before the next AI request',
+    withdrawn: 'AI permission withdrawn. Previous processing cannot be undone; see the privacy policy for retention and deletion requests.',
+    linkFailed: 'The page could not be opened. Please try again.',
+    support: 'Support',
+    supportHint: 'Contact us or request help with your data',
+  },
   common: {
+    save: 'Save changes',
     goBack: 'Go back',
     edit: 'Edit',
     category: 'Category',
@@ -148,6 +161,10 @@ export const en = {
   },
 
   item: {
+    editTitle: 'Edit item',
+    editSubtitle: 'Change anything that is not quite right',
+    brandLabel: 'Brand',
+    sizeOnly: 'Size',
     addTitle: 'Add an item',
     addSubtitle: "Snap it. We'll fill in the details",
     pickPrompt: 'Take a photo or choose one from your library',
@@ -157,7 +174,6 @@ export const en = {
     addManually: 'Add manually instead',
     permissionCamera: 'We need permission to access your camera.',
     permissionPhotos: 'We need permission to access your photos.',
-    sizeLabel: ' · Size {size}',
     favorited: '♥ Favorited',
     addToFavorites: '♡ Add to favorites',
     similarTitle: 'Similar in your closet',
@@ -188,6 +204,9 @@ export const en = {
     seasonsPlaceholder: 'spring, summer',
     brandOptional: 'Brand (optional)',
     sizeOptional: 'Size (optional)',
+    lowConfidence: '✨ We think this is a {noun}. Is that right? Change anything that is off.',
+    thisItem: 'piece',
+    patternPlaceholder: 'solid',
     commaHint: 'Separate with commas',
   },
 
@@ -320,6 +339,14 @@ export const en = {
   },
 
   profile: {
+    retag: 'Refresh item tags',
+    retagHint: 'Let us re-read your pieces and fix their styles and seasons',
+    retagRunning: 'Reading your wardrobe…',
+    retagDone: 'Updated {count} piece.',
+    retagDone_other: 'Updated {count} pieces.',
+    retagNothing: 'Everything already looks right.',
+    retagMore: '{count} piece left. Run it again to continue.',
+    retagMore_other: '{count} pieces left. Run it again to continue.',
     title: 'Profile',
     yourProfile: 'Your profile',
     emailVerified: '✓ Email verified',
@@ -342,8 +369,6 @@ export const en = {
     languageHintDevice: 'Following your device',
     privacy: 'Privacy',
     privacyHint: 'Your data stays yours',
-    privacyBody:
-      'Your wardrobe, photos and preferences are private to your account, and images are stored privately — nobody else using Closette can see them.\n\nTo catalogue an item or style a look, the photo or description you send is processed by a third-party AI provider (OpenAI). It is used to answer that one request and is not used to advertise to you.\n\nDeleting your account removes your account, your items and your uploaded photos.',
     about: 'About Closette',
     version: 'Version {version}',
     aboutBody: 'Your AI-powered wardrobe & beauty assistant.',

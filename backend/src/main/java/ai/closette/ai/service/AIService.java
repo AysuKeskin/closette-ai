@@ -34,7 +34,9 @@ public interface AIService {
     float[] embedItem(byte[] image, String filename, String contentType);
 
     /** RAG: compose one outfit from the retrieved owned items. Null on failure. */
-    OutfitSuggestion generateOutfit(String occasion, List<OutfitCandidate> items, List<String> preferences);
+    /** {@code avoidItemIds} is the look already shown, so "try another" varies. */
+    OutfitSuggestion generateOutfit(String occasion, List<OutfitCandidate> items,
+                                    List<String> preferences, List<String> avoidItemIds);
 
     /** RAG: should-I-buy verdict from the candidate + similar owned items + scores. Null on failure. */
     BuyAdvice buyAdvice(Map<String, Object> candidate, List<Map<String, Object>> matches, Map<String, Object> scores);

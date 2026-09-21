@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { toApiError } from '../../api/client';
@@ -17,6 +17,7 @@ import type { GeneratedLook } from '../../api/types';
 import { useDeleteLook, useGenerateLook, useSaveLook } from '../../features/outfits';
 import { useT, type TranslationKey } from '../../i18n';
 import { useDomainLabels } from '../../i18n/domain';
+import { openItemDetail } from '../../navigation/navigationRef';
 import { colors, radius, spacing } from '../../theme';
 
 // A pool of occasions; we show a rotating handful each time the screen opens.
@@ -61,16 +62,26 @@ export function GetReadyScreen() {
     }, []),
   );
 
-  const run = (text: string) => {
+  // Everything already shown for this occasion, so repeated "try another" taps keep
+  // moving instead of ping-ponging between two looks. Cleared when the occasion
+  // changes. The stylist may still reuse a piece when the wardrobe leaves no choice.
+  const shown = useRef<string[]>([]);
+
+  const run = (text: string, keepHistory = false) => {
     const value = text.trim();
     if (!value) return;
     setError(null);
     setSavedId(null);
     setPrompt(value);
+    if (!keepHistory) shown.current = [];
     generate.mutate(
-      { prompt: value, occasion: value },
+      { prompt: value, occasion: value, excludeItemIds: shown.current },
       {
-        onSuccess: (data) => setLook(data),
+        onSuccess: (data) => {
+          setLook(data);
+          const ids = data.items.map((i) => i.id);
+          shown.current = Array.from(new Set([...shown.current, ...ids]));
+        },
         onError: (err) => setError(toApiError(err).message),
       },
     );
@@ -158,6 +169,7 @@ export function GetReadyScreen() {
                   title={item.name}
                   subtitle={labels.clothingCategory(item.category)}
                   imageUrl={item.imageUrl}
+                  onPress={() => openItemDetail(item)}
                 />
               )}
               style={styles.items}
@@ -180,7 +192,7 @@ export function GetReadyScreen() {
                 iconName="ai-magic"
                 variant="ghost"
                 size="sm"
-                onPress={() => run(prompt)}
+                onPress={() => run(prompt, true)}
                 fullWidth={false}
               />
             </View>

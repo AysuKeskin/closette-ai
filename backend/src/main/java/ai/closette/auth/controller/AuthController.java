@@ -61,9 +61,10 @@ public class AuthController {
         return ApiResponse.ok(null);
     }
 
-    /** Stateless logout — the client simply discards its tokens. */
+    /** Revoke the session even when its access token has expired. */
     @PostMapping("/logout")
-    public ApiResponse<Void> logout() {
+    public ApiResponse<Void> logout(@Valid @RequestBody RefreshRequest request) {
+        authService.logout(request);
         return ApiResponse.ok(null);
     }
 }

@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ActionSheet, AppText, Card, Header, Icon, IconName, Screen, VerifyBanner } from '../../components/ui';
-import { toApiError } from '../../api/client';
+import { api, API_BASE_URL, toApiError } from '../../api/client';
+import { forgetAiConsent, openLegalPage } from '../../api/consent';
 import { userApi } from '../../api/endpoints';
 import { useAuth } from '../../store/auth';
 import { deviceLanguage, useLocale } from '../../store/locale';
+import { useRetagWardrobe } from '../../features/wardrobe';
 import { useStylePreferences } from '../../features/preferences';
 import { useT } from '../../i18n';
 import {
@@ -23,6 +25,7 @@ const APP_VERSION = '0.1.0';
 
 export function ProfileScreen() {
   const { t: text, tPlural, language } = useT();
+  const retag = useRetagWardrobe();
   const user = useAuth((s) => s.user);
   const signOut = useAuth((s) => s.signOut);
   const prefs = useStylePreferences();
@@ -65,6 +68,23 @@ export function ProfileScreen() {
         .join(' · ')
     : text('profile.styleQuizPrompt');
 
+  // Re-cataloguing is bounded per run, so the result says whether anything is left.
+  const onRetag = () => {
+    if (retag.isPending) return;
+    retag.mutate(undefined, {
+      onSuccess: (summary) => {
+        const done = summary.updated > 0
+          ? tPlural('profile.retagDone', summary.updated)
+          : text('profile.retagNothing');
+        const more = summary.remaining > 0
+          ? ` ${tPlural('profile.retagMore', summary.remaining)}`
+          : '';
+        Alert.alert(text('profile.retag'), done + more);
+      },
+      onError: (err) => Alert.alert(text('profile.retag'), toApiError(err).message),
+    });
+  };
+
   const rows: Row[] = [
     {
       // No globe in the icon set, and `info` is already the About row — so the
@@ -76,6 +96,12 @@ export function ProfileScreen() {
         ? text('profile.languageHintDevice')
         : text(language === 'tr' ? 'language.turkish' : 'language.english'),
       onPress: () => setLanguageSheetOpen(true),
+    },
+    {
+      icon: 'ai-magic',
+      title: text('profile.retag'),
+      subtitle: retag.isPending ? text('profile.retagRunning') : text('profile.retagHint'),
+      onPress: onRetag,
     },
     {
       icon: 'palette',
@@ -102,7 +128,21 @@ export function ProfileScreen() {
       icon: 'privacy',
       title: text('profile.privacy'),
       subtitle: text('profile.privacyHint'),
-      onPress: () => Alert.alert(text('profile.privacy'), text('profile.privacyBody')),
+      onPress: () => { void openLegalPage(`${API_BASE_URL}/privacy?lang=${language}`); },
+    },
+    {
+      icon: 'privacy', title: text('consent.withdraw'), subtitle: text('consent.withdrawHint'),
+      onPress: async () => {
+        try {
+          await api.put('/api/users/me/ai-consent', { accepted: false });
+          forgetAiConsent();
+          Alert.alert(text('consent.withdraw'), text('consent.withdrawn'));
+        } catch (err) { Alert.alert(text('consent.withdraw'), toApiError(err).message); }
+      },
+    },
+    {
+      icon: 'envelope', title: text('consent.support'), subtitle: text('consent.supportHint'),
+      onPress: () => { void openLegalPage(`${API_BASE_URL}/support?lang=${language}`); },
     },
     {
       icon: 'info',

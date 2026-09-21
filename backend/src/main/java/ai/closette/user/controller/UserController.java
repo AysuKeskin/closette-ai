@@ -23,11 +23,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final ai.closette.auth.service.AiConsentService consent;
     private final EmailVerificationService emailVerificationService;
 
-    public UserController(UserService userService, EmailVerificationService emailVerificationService) {
+    public UserController(UserService userService, EmailVerificationService emailVerificationService, ai.closette.auth.service.AiConsentService consent) {
         this.userService = userService;
+        this.consent = consent;
         this.emailVerificationService = emailVerificationService;
+    }
+
+    public record ConsentRequest(String version, boolean accepted) { }
+
+    @PutMapping("/me/ai-consent")
+    public ApiResponse<Void> aiConsent(@RequestBody ConsentRequest request) {
+        consent.update(SecurityUtil.currentUserId(), request.version(), request.accepted());
+        return ApiResponse.ok(null);
     }
 
     @GetMapping("/me")

@@ -15,5 +15,10 @@ public interface WardrobeItemRepository
 
     List<WardrobeItem> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
+    /** Least recently touched first, so a capped re-catalogue walks the whole wardrobe
+     *  across repeated runs instead of redoing the same items. */
+    List<WardrobeItem> findByUserIdOrderByUpdatedAtAsc(UUID userId);
+
     long countByUserId(UUID userId);
+    boolean existsByImageKeyAndUserId(String imageKey, UUID userId);
 }

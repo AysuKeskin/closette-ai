@@ -17,7 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -46,10 +46,10 @@ class BeautyServiceTest {
     @Autowired
     BeautyService beautyService;
 
-    @MockBean
+    @MockitoBean
     StorageService storage;
 
-    @MockBean
+    @MockitoBean
     AIService aiService;
 
     @BeforeEach

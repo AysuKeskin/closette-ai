@@ -9,6 +9,7 @@ import { AppText, Button, Card, Chip, Header, Screen, TextField } from '../../co
 import { BEAUTY_CATEGORIES, BeautyCategory } from '../../api/types';
 import { useCreateBeauty, useScanIngredients } from '../../features/beauty';
 import { useT } from '../../i18n';
+import { useDomainLabels } from '../../i18n/domain';
 import { colors, radius, spacing } from '../../theme';
 import type { BeautyStackParamList } from '../../navigation/types';
 
@@ -25,6 +26,7 @@ function titleCase(value: string): string {
 
 export function ConfirmBeautyScreen() {
   const { t: text } = useT();
+  const labels = useDomainLabels();
   const navigation = useNavigation<NativeStackNavigationProp<BeautyStackParamList>>();
   const route = useRoute<RouteProp<BeautyStackParamList, 'ConfirmBeauty'>>();
   const { analysis: response, candidate, imageUri } = route.params;
@@ -137,7 +139,7 @@ export function ConfirmBeautyScreen() {
           </AppText>
           <View style={styles.chips}>
             {BEAUTY_CATEGORIES.map((c) => (
-              <Chip key={c} label={titleCase(c)} selected={category === c} onPress={() => setCategory(c)} />
+              <Chip key={c} label={labels.beautyCategory(c)} selected={category === c} onPress={() => setCategory(c)} />
             ))}
           </View>
         </View>

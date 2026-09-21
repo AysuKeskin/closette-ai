@@ -60,17 +60,38 @@ public class JwtService {
     }
 
     public String generateAccessToken(UUID userId) {
-        return build(userId, TYPE_ACCESS, accessTtl);
+        return generateAccessToken(userId, UUID.randomUUID());
     }
 
     public String generateRefreshToken(UUID userId) {
-        return build(userId, TYPE_REFRESH, refreshTtl);
+        return generateRefreshToken(userId, UUID.randomUUID());
     }
 
-    private String build(UUID userId, String type, Duration ttl) {
+    public String generateAccessToken(UUID userId, UUID sessionId) {
+        return build(userId, sessionId, TYPE_ACCESS, accessTtl);
+    }
+
+    public String generateRefreshToken(UUID userId, UUID sessionId) {
+        return build(userId, sessionId, TYPE_REFRESH, refreshTtl);
+    }
+
+    public record SessionClaims(UUID userId, UUID sessionId) { }
+
+    public SessionClaims parseSession(String token, String type) {
+        try {
+            Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+            if (!type.equals(claims.get(TYPE_CLAIM, String.class))) return null;
+            return new SessionClaims(UUID.fromString(claims.getSubject()),
+                    UUID.fromString(claims.get("sid", String.class)));
+        } catch (Exception e) { return null; }
+    }
+
+    private String build(UUID userId, UUID sessionId, String type, Duration ttl) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
+                .id(UUID.randomUUID().toString())
+                .claim("sid", sessionId.toString())
                 .claim(TYPE_CLAIM, type)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(ttl)))
