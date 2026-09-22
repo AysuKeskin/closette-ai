@@ -1,5 +1,6 @@
 import { api, unwrap } from './client';
 import type {
+  Allowance,
   AnalyzeResponse,
   AuthResult,
   BeautyAnalyzeResponse,
@@ -287,6 +288,20 @@ export const recommendationApi = {
     const { data } = await api.post<Envelope<ShouldIBuyResult>>('/api/recommendations/should-i-buy/photo', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return unwrap(data);
+  },
+};
+
+export const usageApi = {
+  /**
+   * What the account may still spend, per operation.
+   *
+   * Counts rather than one balance: "two outfits left" is something a person can
+   * act on, and a shared number would mean reading an ingredient label quietly
+   * costs an outfit.
+   */
+  async allowances(): Promise<Allowance[]> {
+    const { data } = await api.get<Envelope<Allowance[]>>('/api/usage/me');
     return unwrap(data);
   },
 };

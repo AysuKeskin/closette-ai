@@ -37,10 +37,13 @@ public class EmailVerificationService {
 
     private final UserRepository userRepository;
     private final EmailSender emailSender;
+    private final ai.closette.usage.service.UsageService usage;
 
-    public EmailVerificationService(UserRepository userRepository, EmailSender emailSender) {
+    public EmailVerificationService(UserRepository userRepository, EmailSender emailSender,
+                                    ai.closette.usage.service.UsageService usage) {
         this.userRepository = userRepository;
         this.emailSender = emailSender;
+        this.usage = usage;
     }
 
     /** Generate a fresh code, persist it on the user, and "send" it. */
@@ -93,7 +96,11 @@ public class EmailVerificationService {
         user.setVerificationCode(null);
         user.setVerificationExpiresAt(null);
         user.setVerificationAttempts(0);
-        return UserResponse.from(userRepository.save(user));
+        UserResponse verified = UserResponse.from(userRepository.save(user));
+        // Verification first: a bonus handed out before an account costs anything
+        // to obtain is a bonus handed out over and over by the same person.
+        usage.grantWelcome(userId);
+        return verified;
     }
 
     /** Re-send a fresh code, subject to a short cooldown. */

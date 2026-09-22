@@ -2,7 +2,10 @@ package ai.closette.user.model;
 
 import ai.closette.common.persistence.BaseEntity;
 import jakarta.persistence.Column;
+import ai.closette.usage.model.UserPlan;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -25,6 +28,11 @@ public class User extends BaseEntity {
 
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified = false;
+
+    /** What this account is entitled to. Billing sets it; until then everyone is FREE. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private UserPlan plan = UserPlan.FREE;
 
     @Column(name = "verification_code", length = 10)
     private String verificationCode;
@@ -165,5 +173,13 @@ public class User extends BaseEntity {
 
     public void setResetSentAt(Instant resetSentAt) {
         this.resetSentAt = resetSentAt;
+    }
+
+    public UserPlan getPlan() {
+        return plan;
+    }
+
+    public void setPlan(UserPlan plan) {
+        this.plan = plan;
     }
 }

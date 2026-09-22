@@ -74,4 +74,13 @@ public class ApiException extends RuntimeException {
     public static ApiException rateLimited(String messageKey, Object... args) {
         return new ApiException(HttpStatus.TOO_MANY_REQUESTS, ErrorCode.RATE_LIMITED, messageKey, args);
     }
+
+    /**
+     * The month's allowance for this action is spent. Same status as a rate limit,
+     * different code: one clears by waiting, the other by the month turning over,
+     * and the app should not offer the wrong advice.
+     */
+    public static ApiException quotaExhausted(String messageKey, Object... args) {
+        return new ApiException(HttpStatus.TOO_MANY_REQUESTS, ErrorCode.AI_QUOTA_EXHAUSTED, messageKey, args);
+    }
 }

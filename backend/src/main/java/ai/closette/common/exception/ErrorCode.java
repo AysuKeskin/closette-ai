@@ -15,6 +15,12 @@ public final class ErrorCode {
     public static final String AI_UNAVAILABLE = "AI_UNAVAILABLE";
     public static final String STORAGE_ERROR = "STORAGE_ERROR";
     public static final String RATE_LIMITED = "RATE_LIMITED";
+    /**
+     * The plan's allowance for this action is spent, which is not the same as
+     * asking too fast: waiting a minute does not help, and the app has something
+     * different to say about each.
+     */
+    public static final String AI_QUOTA_EXHAUSTED = "AI_QUOTA_EXHAUSTED";
     public static final String INTERNAL = "INTERNAL";
 
     private ErrorCode() {

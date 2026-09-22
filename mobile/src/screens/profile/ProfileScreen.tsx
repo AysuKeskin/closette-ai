@@ -9,6 +9,7 @@ import { useAuth } from '../../store/auth';
 import { deviceLanguage, useLocale } from '../../store/locale';
 import { useRetagWardrobe } from '../../features/wardrobe';
 import { hasStyleProfile, useStylePreferences } from '../../features/preferences';
+import { useAllowances } from '../../features/usage';
 import { useT } from '../../i18n';
 import {
   openFavorites,
@@ -31,6 +32,7 @@ export function ProfileScreen() {
   const user = useAuth((s) => s.user);
   const signOut = useAuth((s) => s.signOut);
   const prefs = useStylePreferences();
+  const allowances = useAllowances();
   const followsDevice = useLocale((s) => s.followsDevice);
   const setLanguage = useLocale((s) => s.setLanguage);
   const useDeviceLanguage = useLocale((s) => s.useDeviceLanguage);
@@ -87,6 +89,23 @@ export function ProfileScreen() {
     });
   };
 
+  const operationLabels: Record<string, string> = {
+    'photo-analysis': text('usage.photoAnalysis'),
+    outfit: text('usage.outfit'),
+    'shopping-advice': text('usage.shoppingAdvice'),
+    'ingredients-ocr': text('usage.ingredientsOcr'),
+    'ingredient-explanation': text('usage.ingredientExplanation'),
+  };
+  const allowanceSummary = allowances.data
+    ? allowances.data
+        .filter((a) => a.total > 0)
+        .map((a) => `${operationLabels[a.operation] ?? a.operation}: ${a.remaining}`)
+        .join(' · ') || text('usage.none')
+    : text('common.loading');
+  const allowanceDetail = (allowances.data ?? [])
+    .map((a) => `${operationLabels[a.operation] ?? a.operation}: ${a.remaining}/${a.total}`)
+    .join('\n');
+
   const rows: Row[] = [
     {
       // No globe in the icon set, and `info` is already the About row — so the
@@ -98,6 +117,14 @@ export function ProfileScreen() {
         ? text('profile.languageHintDevice')
         : text(language === 'tr' ? 'language.turkish' : 'language.english'),
       onPress: () => setLanguageSheetOpen(true),
+    },
+    {
+      icon: 'ai-magic',
+      title: text('profile.aiAllowance'),
+      // The whole month at a glance. Get Ready shows the one count it is about to
+      // spend; this is where someone comes to ask why something stopped working.
+      subtitle: allowanceSummary,
+      onPress: () => Alert.alert(text('profile.aiAllowance'), allowanceDetail),
     },
     {
       icon: 'ai-magic',

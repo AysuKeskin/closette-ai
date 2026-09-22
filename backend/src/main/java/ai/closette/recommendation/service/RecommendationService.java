@@ -51,6 +51,7 @@ public class RecommendationService {
     private final AccountGuard accountGuard;
     private final AIService aiService;
     private final Messages messages;
+    private final ai.closette.usage.service.AiUse aiUse;
 
     public RecommendationService(PreferenceWeightRepository weightRepository,
                                  OutfitFeedbackRepository feedbackRepository,
@@ -59,8 +60,10 @@ public class RecommendationService {
                                  StorageService storage,
                                  AccountGuard accountGuard,
                                  AIService aiService,
-                                 Messages messages) {
+                                 Messages messages,
+                                 ai.closette.usage.service.AiUse aiUse) {
         this.weightRepository = weightRepository;
+        this.aiUse = aiUse;
         this.feedbackRepository = feedbackRepository;
         this.outfitRepository = outfitRepository;
         this.wardrobeRepository = wardrobeRepository;
@@ -199,12 +202,17 @@ public class RecommendationService {
                 .toList();
 
         // RAG: retrieved similar owned items + code-computed scores → LLM verdict.
-        BuyAdvice advice = aiService.buyAdvice(
-                candidateContext(req),
-                matchContext(matching),
-                Map.of("fitScore", score,
-                        "pairsWithCount", matching.size(),
-                        "alreadyOwnSimilar", similar.size()));
+        // One assessment, one use. The candidate's own analysis is part of it: reading
+        // the photo and judging it are one thing the user asked for, not two.
+        BuyAdvice advice = aiUse.run(userId, ai.closette.usage.model.AiOperation.SHOPPING_ADVICE,
+                ai.closette.usage.service.UsageService.attemptKey(
+                        userId, "buy", req.category() + "|" + req.colors() + "|" + req.styles()),
+                () -> aiService.buyAdvice(
+                        candidateContext(req),
+                        matchContext(matching),
+                        Map.of("fitScore", score,
+                                "pairsWithCount", matching.size(),
+                                "alreadyOwnSimilar", similar.size())));
         String verdict = advice != null && advice.verdict() != null
                 ? advice.verdict() : ruleVerdict(score, candidateAttrs, similar.size());
         String finalExplanation = advice != null && advice.explanation() != null && !advice.explanation().isBlank()

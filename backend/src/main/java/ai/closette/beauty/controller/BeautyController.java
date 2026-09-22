@@ -100,13 +100,13 @@ public class BeautyController {
     @RateLimit(cost = 12)
     @PostMapping(value = "/ingredients/scan", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<List<String>> scanIngredients(@RequestParam("file") MultipartFile file) {
-        return ApiResponse.ok(service.scanIngredients(file));
+        return ApiResponse.ok(service.scanIngredients(SecurityUtil.currentUserId(), file));
     }
 
     /** FR-06 — plain-language ingredient explanation. */
     @RateLimit(cost = 1)
     @GetMapping("/ingredients/explain")
     public ApiResponse<IngredientExplanation> explain(@RequestParam String name) {
-        return ApiResponse.ok(service.explainIngredient(name));
+        return ApiResponse.ok(service.explainIngredient(SecurityUtil.currentUserId(), name));
     }
 }

@@ -296,6 +296,9 @@ export const en = {
     subtitle: "Tell us the occasion. We'll style a complete look",
     placeholder: 'e.g. Dinner with friends, relaxed but chic',
     tryOne: 'Try one of these',
+    outfitsLeft: '{count} outfit left this month.',
+    outfitsLeft_other: '{count} outfits left this month.',
+    outfitsNoneLeft: 'No outfits left this month. Your next one arrives on {date}.',
     createLook: 'Create my look',
     styling: 'Styling your look…',
     saved: 'Saved ✓',
@@ -359,6 +362,7 @@ export const en = {
     logOut: 'Log out',
     dataSources: 'Data sources',
     dataSourcesHint: 'Product details and photos from Open Beauty Facts, under ODbL and CC BY-SA',
+    aiAllowance: 'AI allowance',
     styleTakeTest: 'Take the test',
     stylePreferences: 'Style preferences',
     styleQuizPrompt: 'Take the quick style quiz',
@@ -464,6 +468,14 @@ export const en = {
     retryHours_other: 'It refreshes in about {count} hours.',
     timeout: 'The request timed out. Please try again.',
     generic: 'Something went wrong.',
+  },
+  usage: {
+    photoAnalysis: 'Photos',
+    outfit: 'Outfits',
+    shoppingAdvice: 'Buy advice',
+    ingredientsOcr: 'Label scans',
+    ingredientExplanation: 'Ingredient notes',
+    none: 'Nothing left this month',
   },
 } as const;
 

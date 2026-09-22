@@ -25,5 +25,6 @@ export const queryKeys = {
   wardrobeItem: (id: string) => ['wardrobe', 'item', id] as const,
   beauty: (query?: Record<string, unknown>) => ['beauty', query ?? {}] as const,
   beautyItem: (id: string) => ['beauty', 'item', id] as const,
+  allowances: ['usage', 'allowances'] as const,
   savedLooks: (limit?: number) => ['outfits', 'saved', limit ?? 'all'] as const,
 };

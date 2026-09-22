@@ -91,7 +91,7 @@ class RateLimitEnforcementTest {
                         .content("{\"occasion\":\"akşam yemeği\"}"))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.error.message",
-                        is("Şimdilik yapay zekâ kotanı doldurdun.")))
+                        is("Şu an için yapay zekâ kullanım sınırına ulaştın.")))
                 // The app appends the concrete wait from this header; the sentence
                 // stopped promising "shortly" once the real number was available.
                 .andExpect(header().exists("Retry-After"));

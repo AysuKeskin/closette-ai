@@ -122,6 +122,8 @@ services:
       MINIO_BUCKET_BEAUTY: ${MINIO_BUCKET_BEAUTY:-beauty}
       AI_SERVICE_BASE_URL: http://ai-service:8000
       AI_PROVIDER: ${AI_PROVIDER:-mock}
+      # log counts what would have been refused; enforce refuses it.
+      USAGE_MODE: ${USAGE_MODE:-log}
       AI_PRIVACY_URL: ${AI_PRIVACY_URL:-}
       AI_PROCESSING_DETAILS: ${AI_PROCESSING_DETAILS:-Local development}
       STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}

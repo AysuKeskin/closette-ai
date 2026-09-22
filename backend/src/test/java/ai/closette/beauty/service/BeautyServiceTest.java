@@ -192,20 +192,22 @@ class BeautyServiceTest {
 
     @Test
     void ingredientLookupIsTrimmedBeforeItReachesTheAiSeam() {
+        UUID userId = newUser();
         when(aiService.explainIngredient("Niacinamide"))
                 .thenReturn(new IngredientExplanation("Niacinamide", "A form of vitamin B3."));
 
-        assertThat(beautyService.explainIngredient("  Niacinamide  ").explanation())
+        assertThat(beautyService.explainIngredient(userId, "  Niacinamide  ").explanation())
                 .isEqualTo("A form of vitamin B3.");
         verify(aiService).explainIngredient("Niacinamide");
     }
 
     @Test
     void ingredientLookupRejectsABlankName() {
-        assertThatThrownBy(() -> beautyService.explainIngredient("   "))
+        UUID userId = newUser();
+        assertThatThrownBy(() -> beautyService.explainIngredient(userId, "   "))
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.VALIDATION));
-        assertThatThrownBy(() -> beautyService.explainIngredient(null))
+        assertThatThrownBy(() -> beautyService.explainIngredient(userId, null))
                 .isInstanceOf(ApiException.class);
     }
 
@@ -235,10 +237,11 @@ class BeautyServiceTest {
 
     @Test
     void scanningIngredientsCleansWhatTheAiRead() {
+        UUID userId = newUser();
         when(aiService.extractIngredients(any(), any(), any()))
                 .thenReturn(List.of("Aqua", ".", "and", "( Niacinamide )"));
 
-        List<String> scanned = beautyService.scanIngredients(
+        List<String> scanned = beautyService.scanIngredients(userId, 
                 new MockMultipartFile("file", "list.jpg", "image/jpeg", new byte[]{1, 2, 3}));
 
         assertThat(scanned).containsExactly("Aqua", "Niacinamide");

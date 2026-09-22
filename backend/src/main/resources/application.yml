@@ -70,6 +70,36 @@ closette:
     bucket-wardrobe: ${MINIO_BUCKET_WARDROBE:wardrobe}
     bucket-beauty: ${MINIO_BUCKET_BEAUTY:beauty}
     signed-url-ttl-minutes: 60
+  usage:
+    # log = count and report what would have been refused, enforce = refuse it.
+    # Shadow mode first: the allowances below are a guess until real months of use
+    # say otherwise, and finding that out by turning people away is the expensive
+    # way to learn it.
+    mode: ${USAGE_MODE:log}
+    # Per calendar month, per operation, counted separately. A photo is not an
+    # outfit, and spending one must not quietly consume the other.
+    free:
+      photo-analysis:          ${FREE_PHOTO_ANALYSIS:5}
+      outfit:                  ${FREE_OUTFIT:1}
+      shopping-advice:         ${FREE_SHOPPING_ADVICE:1}
+      ingredients-ocr:         ${FREE_INGREDIENTS_OCR:0}
+      ingredient-explanation:  ${FREE_INGREDIENT_EXPLANATION:0}
+    plus:
+      photo-analysis:          ${PLUS_PHOTO_ANALYSIS:60}
+      outfit:                  ${PLUS_OUTFIT:40}
+      shopping-advice:         ${PLUS_SHOPPING_ADVICE:10}
+      ingredients-ocr:         ${PLUS_INGREDIENTS_OCR:10}
+      ingredient-explanation:  ${PLUS_INGREDIENT_EXPLANATION:10}
+    # Granted once, when the account verifies its email, and expiring on its own
+    # schedule. Enough to see what the app does before deciding to pay for it.
+    welcome:
+      days: ${WELCOME_DAYS:30}
+      photo-analysis:          ${WELCOME_PHOTO_ANALYSIS:20}
+      outfit:                  ${WELCOME_OUTFIT:2}
+      shopping-advice:         ${WELCOME_SHOPPING_ADVICE:1}
+      ingredients-ocr:         ${WELCOME_INGREDIENTS_OCR:1}
+      ingredient-explanation:  ${WELCOME_INGREDIENT_EXPLANATION:1}
+
   ratelimit:
     mode: ${RATE_LIMIT_MODE:enforce}
     # Per-user budgets are the real control: they bound what one account can spend.

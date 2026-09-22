@@ -372,7 +372,7 @@ class OpenAICompatibleVLM(AIProvider):
         with httpx.Client(timeout=60) as client:
             r = client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
             if r.status_code >= 400:
-                log.warning("VLM %s HTTP %s: %s", self.model, r.status_code, r.text[:600])
+                _log_provider_failure(self.provider, self.model, operation, r)
             r.raise_for_status()
             body = r.json()
         self._record_usage(operation, body)
@@ -400,6 +400,42 @@ class OpenAICompatibleVLM(AIProvider):
             operation, self.model,
             usage.get("prompt_tokens"), usage.get("completion_tokens"), usage.get("total_tokens"),
         )
+
+
+def _log_provider_failure(provider: str, model: str, operation: str, response) -> None:
+    """
+    Say which kind of failure this is, because the answer differs.
+
+    A busy provider fixes itself; an empty account and a rejected key do not. Both
+    of those stop every AI feature until somebody with the billing login acts, and
+    they used to be logged at the same level, in the same words, as a momentary
+    blip. Whoever reads this at 3am should be able to tell in one line whether to
+    wait or to go and pay.
+    """
+    body = response.text[:600]
+    lowered = body.lower()
+    status = response.status_code
+
+    if status in (401, 403):
+        log.error(
+            "AI is down: %s rejected our credentials on %s. Every AI feature fails "
+            "until the key is replaced. HTTP %s: %s",
+            provider, operation, status, body,
+        )
+    elif status == 429 and ("insufficient_quota" in lowered or "billing" in lowered
+                            or "exceeded your current quota" in lowered):
+        log.error(
+            "AI is down: the %s account is out of credit (%s). Every AI feature "
+            "fails until it is topped up. HTTP 429: %s",
+            provider, operation, body,
+        )
+    elif status == 429:
+        log.warning(
+            "%s is rate-limiting us on %s; this should clear on its own. HTTP 429: %s",
+            provider, operation, body,
+        )
+    else:
+        log.warning("VLM %s HTTP %s on %s: %s", model, status, operation, body)
 
 
 def _shrink(image: bytes, max_side: int = 512) -> bytes:

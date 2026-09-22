@@ -38,14 +38,17 @@ public class WardrobeService {
     private final WardrobeItemRepository repository;
     private final StorageService storage;
     private final ai.closette.auth.service.AiConsentService consent;
+    private final ai.closette.usage.service.AiUse aiUse;
     private final AIService aiService;
     private final EmbeddingRepository embeddings;
 
     public WardrobeService(WardrobeItemRepository repository, StorageService storage,
-                           AIService aiService, EmbeddingRepository embeddings, ai.closette.auth.service.AiConsentService consent) {
+                           AIService aiService, EmbeddingRepository embeddings, ai.closette.auth.service.AiConsentService consent,
+                           ai.closette.usage.service.AiUse aiUse) {
         this.repository = repository;
         this.storage = storage;
         this.consent = consent;
+        this.aiUse = aiUse;
         this.aiService = aiService;
         this.embeddings = embeddings;
     }
@@ -56,7 +59,9 @@ public class WardrobeService {
         byte[] bytes = readBytes(file);
         String key = storage.upload(storage.wardrobeBucket(), userId, bytes,
                 file.getContentType(), file.getOriginalFilename());
-        ClothingAnalysis analysis = aiService.analyzeClothing(bytes, file.getOriginalFilename(), file.getContentType());
+        ClothingAnalysis analysis = aiUse.run(userId, ai.closette.usage.model.AiOperation.PHOTO_ANALYSIS,
+                ai.closette.usage.service.UsageService.attemptKey(userId, "analyze", key),
+                () -> aiService.analyzeClothing(bytes, file.getOriginalFilename(), file.getContentType()));
         return new AnalyzeResponse(key, storage.presignedUrl(storage.wardrobeBucket(), key), analysis);
     }
 

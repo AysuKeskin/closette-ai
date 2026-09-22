@@ -2,6 +2,8 @@ package ai.closette.beauty.service;
 
 import ai.closette.ai.dto.IngredientExplanation;
 import ai.closette.ai.service.AIService;
+import ai.closette.auth.service.AuthService;
+import ai.closette.support.TestData;
 import ai.closette.beauty.repository.IngredientExplanationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +31,9 @@ import static org.mockito.Mockito.when;
 class IngredientCacheTest {
 
     @Autowired
+    AuthService authService;
+
+    @Autowired
     BeautyService beautyService;
 
     @Autowired
@@ -44,12 +49,13 @@ class IngredientCacheTest {
 
     @Test
     void theSameIngredientIsExplainedOnceAndServedFromTheCacheAfterwards() {
+        UUID userId = TestData.newUser(authService);
         String name = freshName();
         when(aiService.explainIngredient(any()))
                 .thenReturn(new IngredientExplanation(name, "A humectant that holds water."));
 
-        IngredientExplanation first = beautyService.explainIngredient(name);
-        IngredientExplanation second = beautyService.explainIngredient(name);
+        IngredientExplanation first = beautyService.explainIngredient(userId, name);
+        IngredientExplanation second = beautyService.explainIngredient(userId, name);
 
         assertThat(first.explanation()).isEqualTo("A humectant that holds water.");
         assertThat(second.explanation()).isEqualTo(first.explanation());
@@ -59,11 +65,12 @@ class IngredientCacheTest {
 
     @Test
     void anEmptyAnswerIsNotCached() {
+        UUID userId = TestData.newUser(authService);
         // Caching a blank would make one bad call permanent for every later reader.
         String name = freshName();
         when(aiService.explainIngredient(any())).thenReturn(new IngredientExplanation(name, "  "));
 
-        beautyService.explainIngredient(name);
+        beautyService.explainIngredient(userId, name);
 
         assertThat(explanations.findByInciNameIgnoreCaseAndLang(name, "en")).isEmpty();
     }

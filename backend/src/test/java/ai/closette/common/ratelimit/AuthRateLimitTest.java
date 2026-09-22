@@ -151,6 +151,6 @@ class AuthRateLimitTest {
                         .header(HttpHeaders.ACCEPT_LANGUAGE, "tr")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isTooManyRequests())
-                .andExpect(jsonPath("$.error.message", is("Çok fazla deneme — biraz bekleyip tekrar dene")));
+                .andExpect(jsonPath("$.error.message", is("Çok fazla deneme yaptın. Biraz bekleyip tekrar dene.")));
     }
 }

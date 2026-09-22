@@ -36,13 +36,16 @@ public class BeautyService {
     private final StorageService storage;
     private final AIService aiService;
     private final IngredientExplanationRepository explanations;
+    private final ai.closette.usage.service.AiUse aiUse;
 
     public BeautyService(BeautyItemRepository repository, StorageService storage, AIService aiService,
-                         IngredientExplanationRepository explanations) {
+                         IngredientExplanationRepository explanations,
+                         ai.closette.usage.service.AiUse aiUse) {
         this.repository = repository;
         this.storage = storage;
         this.aiService = aiService;
         this.explanations = explanations;
+        this.aiUse = aiUse;
     }
 
     /** Flow B step 1 — upload a product photo, get an editable AI analysis back. */
@@ -50,7 +53,9 @@ public class BeautyService {
         byte[] bytes = readBytes(file);
         String key = storage.upload(storage.beautyBucket(), userId, bytes,
                 file.getContentType(), file.getOriginalFilename());
-        BeautyAnalysis analysis = aiService.analyzeBeautyPhoto(bytes, file.getOriginalFilename(), file.getContentType());
+        BeautyAnalysis analysis = aiUse.run(userId, ai.closette.usage.model.AiOperation.PHOTO_ANALYSIS,
+                ai.closette.usage.service.UsageService.attemptKey(userId, "beauty", key),
+                () -> aiService.analyzeBeautyPhoto(bytes, file.getOriginalFilename(), file.getContentType()));
         return new BeautyAnalyzeResponse(key, storage.presignedUrl(storage.beautyBucket(), key), analysis);
     }
 
@@ -131,9 +136,12 @@ public class BeautyService {
     }
 
     /** OCR a photo of an ingredient list into cleaned ingredient names (best-effort; empty on failure). */
-    public List<String> scanIngredients(MultipartFile file) {
+    public List<String> scanIngredients(UUID userId, MultipartFile file) {
         byte[] bytes = readBytes(file);
-        List<String> raw = aiService.extractIngredients(bytes, file.getOriginalFilename(), file.getContentType());
+        List<String> raw = aiUse.run(userId, ai.closette.usage.model.AiOperation.INGREDIENTS_OCR,
+                ai.closette.usage.service.UsageService.attemptKey(
+                        userId, "ocr", file.getOriginalFilename() + ":" + bytes.length),
+                () -> aiService.extractIngredients(bytes, file.getOriginalFilename(), file.getContentType()));
         return cleanIngredients(raw);
     }
 
@@ -158,7 +166,7 @@ public class BeautyService {
      * a fixed bill and one that grows with every reader.
      */
     @Transactional
-    public IngredientExplanation explainIngredient(String name) {
+    public IngredientExplanation explainIngredient(UUID userId, String name) {
         String cleaned = name == null ? "" : name.trim();
         // Guard against junk tokens (a stray ".", a number) reaching the model, which otherwise
         // replies with conversational filler ("sure, give me an ingredient") shown to the user.
@@ -170,7 +178,12 @@ public class BeautyService {
         if (cached.isPresent()) {
             return new IngredientExplanation(cleaned, cached.get().getExplanation());
         }
-        IngredientExplanation fresh = aiService.explainIngredient(cleaned);
+        // Charged here and not above: a cached answer costs us nothing to hand over,
+        // so taking an allowance for it would be charging for our own storage.
+        IngredientExplanation fresh = aiUse.run(userId,
+                ai.closette.usage.model.AiOperation.INGREDIENT_EXPLANATION,
+                ai.closette.usage.service.UsageService.attemptKey(userId, "explain", cleaned + "|" + lang),
+                () -> aiService.explainIngredient(cleaned));
         if (fresh != null && fresh.explanation() != null && !fresh.explanation().isBlank()) {
             explanations.save(new IngredientExplanationEntity(cleaned, lang, fresh.explanation()));
         }

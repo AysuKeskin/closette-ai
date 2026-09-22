@@ -15,6 +15,7 @@ import {
 } from '../../components/ui';
 import type { GeneratedLook } from '../../api/types';
 import { useDeleteLook, useGenerateLook, useSaveLook } from '../../features/outfits';
+import { allowanceFor, useAllowances } from '../../features/usage';
 import { useT, type TranslationKey } from '../../i18n';
 import { useDomainLabels } from '../../i18n/domain';
 import { openItemDetail } from '../../navigation/navigationRef';
@@ -42,10 +43,20 @@ function sample<T>(arr: T[], n: number): T[] {
   return [...arr].sort(() => Math.random() - 0.5).slice(0, n);
 }
 
+/** The reset instant as a plain date, so "next month" is an actual day. */
+function formatResetDate(iso: string, language: string): string {
+  return new Date(iso).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', {
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
 export function GetReadyScreen() {
-  const { t: text } = useT();
+  const { t: text, tPlural, language } = useT();
   const labels = useDomainLabels();
   const generate = useGenerateLook();
+  const allowances = useAllowances();
+  const outfits = allowanceFor(allowances.data, 'outfit');
   const saveLook = useSaveLook();
   const deleteLook = useDeleteLook();
   const [prompt, setPrompt] = useState('');
@@ -81,8 +92,13 @@ export function GetReadyScreen() {
           setLook(data);
           const ids = data.items.map((i) => i.id);
           shown.current = Array.from(new Set([...shown.current, ...ids]));
+          void allowances.refetch();
         },
-        onError: (err) => setError(toApiError(err).message),
+        onError: (err) => {
+          setError(toApiError(err).message);
+          // A refusal is itself news about the balance.
+          void allowances.refetch();
+        },
       },
     );
   };
@@ -140,6 +156,15 @@ export function GetReadyScreen() {
         loading={generate.isPending}
         style={styles.cta}
       />
+
+      {/* Where the decision is made, not buried in a settings screen. */}
+      {outfits ? (
+        <AppText variant="caption" tone="muted" style={styles.allowance}>
+          {outfits.remaining > 0
+            ? tPlural('getReady.outfitsLeft', outfits.remaining)
+            : text('getReady.outfitsNoneLeft', { date: formatResetDate(outfits.resetsAt, language) })}
+        </AppText>
+      ) : null}
 
       {error ? (
         <Card style={styles.errorCard}>
@@ -212,6 +237,7 @@ const styles = StyleSheet.create({
   suggestPressed: { opacity: 0.55 },
   suggestArrow: { color: colors.primary, fontSize: 18, fontWeight: '700' },
   suggestText: { flex: 1 },
+  allowance: { textAlign: 'center', marginTop: spacing.sm },
   cta: { marginTop: spacing.xl },
   errorCard: { marginTop: spacing.lg },
   result: { marginTop: spacing.xl, gap: spacing.sm, borderRadius: radius.lg, backgroundColor: colors.surface },

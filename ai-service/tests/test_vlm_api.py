@@ -249,3 +249,70 @@ def test_an_answer_cut_off_by_the_cap_says_so(set_env, monkeypatch, caplog):
         client.generate_outfit("dinner", [], [], "en")
 
     assert "hit the output cap" in caplog.text
+
+
+def _failing_client(set_env, monkeypatch, status: int, body: str):
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+
+    class FakeResponse:
+        status_code = status
+        text = body
+
+        def raise_for_status(self):
+            raise RuntimeError(f"HTTP {status}")
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def post(self, url, json=None, headers=None):
+            return FakeResponse()
+
+    monkeypatch.setattr("app.providers.vlm_api.httpx.Client", lambda timeout=60: FakeClient())
+    return client
+
+
+def test_an_empty_provider_account_is_reported_as_needing_a_human(set_env, monkeypatch, caplog):
+    """
+    Running out of credit stops every AI feature and fixes itself never.
+
+    It used to be logged exactly like a momentary blip, so the app would quietly
+    stop working until somebody happened to look. The line has to say what to do.
+    """
+    client = _failing_client(set_env, monkeypatch, 429,
+                             '{"error":{"code":"insufficient_quota"}}')
+
+    with caplog.at_level(logging.WARNING, logger="app.providers.vlm_api"):
+        with pytest.raises(RuntimeError):
+            client.generate_outfit("dinner", [], [], "en")
+
+    assert any(r.levelname == "ERROR" for r in caplog.records)
+    assert "out of credit" in caplog.text
+
+
+def test_a_rejected_key_is_reported_as_needing_a_human(set_env, monkeypatch, caplog):
+    client = _failing_client(set_env, monkeypatch, 401, '{"error":{"code":"invalid_api_key"}}')
+
+    with caplog.at_level(logging.WARNING, logger="app.providers.vlm_api"):
+        with pytest.raises(RuntimeError):
+            client.generate_outfit("dinner", [], [], "en")
+
+    assert any(r.levelname == "ERROR" for r in caplog.records)
+    assert "credentials" in caplog.text
+
+
+def test_ordinary_throttling_stays_a_warning(set_env, monkeypatch, caplog):
+    # This one does clear on its own, so waking somebody for it trains them to
+    # ignore the ones that do not.
+    client = _failing_client(set_env, monkeypatch, 429, '{"error":{"code":"rate_limit_exceeded"}}')
+
+    with caplog.at_level(logging.WARNING, logger="app.providers.vlm_api"):
+        with pytest.raises(RuntimeError):
+            client.generate_outfit("dinner", [], [], "en")
+
+    assert not any(r.levelname == "ERROR" for r in caplog.records)
+    assert "clear on its own" in caplog.text

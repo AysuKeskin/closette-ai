@@ -57,6 +57,7 @@ public class OutfitService {
     private final AIService aiService;
     private final StylePreferenceRepository stylePreferences;
     private final Messages messages;
+    private final ai.closette.usage.service.UsageService usage;
 
     public OutfitService(OutfitRepository outfitRepository,
                          OutfitFeedbackRepository feedbackRepository,
@@ -64,7 +65,8 @@ public class OutfitService {
                          StorageService storage,
                          AIService aiService,
                          StylePreferenceRepository stylePreferences,
-                         Messages messages) {
+                         Messages messages,
+                         ai.closette.usage.service.UsageService usage) {
         this.outfitRepository = outfitRepository;
         this.feedbackRepository = feedbackRepository;
         this.wardrobeRepository = wardrobeRepository;
@@ -72,6 +74,7 @@ public class OutfitService {
         this.aiService = aiService;
         this.stylePreferences = stylePreferences;
         this.messages = messages;
+        this.usage = usage;
     }
 
     /** FR-07/08 — compose a complete look from the user's own items (RAG: retrieve
@@ -88,9 +91,24 @@ public class OutfitService {
 
         String occasion = occasionOf(request);
 
+        // Charged before the model runs, not after: charging afterwards lets ten
+        // requests start against the last remaining use. The key identifies this
+        // attempt, so a phone that loses the reply and retries pays once.
+        var reservation = usage.reserve(userId, ai.closette.usage.model.AiOperation.OUTFIT,
+                idempotencyKeyFor(userId, occasion, request));
+
         List<WardrobeItem> candidates = shortlist(all);
-        OutfitSuggestion ai = aiService.generateOutfit(
-                occasion, toCandidates(candidates), preferencesFor(userId), request.excludeItemIds());
+        OutfitSuggestion ai;
+        try {
+            ai = aiService.generateOutfit(
+                    occasion, toCandidates(candidates), preferencesFor(userId), request.excludeItemIds());
+        } catch (RuntimeException e) {
+            // Nothing to show, so the allowance goes back. Whatever the provider
+            // billed us for the attempt stays spent; that is our cost, not theirs.
+            reservation.ifPresent(usage::release);
+            throw e;
+        }
+        reservation.ifPresent(usage::settle);
         if (ai != null) {
             boolean pickedSomething = ai.itemIds() != null && !ai.itemIds().isEmpty();
             Map<String, WardrobeItem> byId = new LinkedHashMap<>();
@@ -339,6 +357,18 @@ public class OutfitService {
             }
         }
         return null;
+    }
+
+    /**
+     * Identifies one attempt at one look.
+     *
+     * The occasion and the excluded ids are what the user actually asked for, so a
+     * retry of the same ask is the same attempt, while "try another" carries a
+     * different exclusion list and is rightly a new one.
+     */
+    private static String idempotencyKeyFor(UUID userId, String occasion, GetReadyRequest request) {
+        List<String> excluded = request.excludeItemIds() == null ? List.of() : request.excludeItemIds();
+        return Integer.toHexString((userId + "|" + occasion + "|" + excluded).hashCode());
     }
 
     private static boolean notBlank(String s) {

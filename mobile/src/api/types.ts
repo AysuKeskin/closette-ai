@@ -187,3 +187,13 @@ export type ShouldIBuyResult = {
   detectedStyles: string[];
   understood: boolean;
 };
+
+/** One operation's standing: what is left, what was granted, and when it renews. */
+export type Allowance = {
+  /** Matches AiOperation.key() on the server, e.g. "photo-analysis". */
+  operation: string;
+  remaining: number;
+  total: number;
+  /** ISO instant the monthly grant renews. */
+  resetsAt: string;
+};

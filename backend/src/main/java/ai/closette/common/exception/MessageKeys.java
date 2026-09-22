@@ -36,6 +36,7 @@ public final class MessageKeys {
     // ---- AI ----
     public static final String AI_CONSENT_REQUIRED = "error.ai.consentRequired";
     public static final String INGREDIENT_REQUIRED = "error.ingredient.required";
+    public static final String AI_QUOTA_EXHAUSTED = "error.ai.quotaExhausted";
     public static final String AI_UNAVAILABLE = "error.ai.unavailable";
     public static final String AI_UNAVAILABLE_ADD_MANUALLY = "error.ai.unavailableAddManually";
 
