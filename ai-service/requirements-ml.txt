@@ -2,5 +2,5 @@
 # Install alongside requirements.txt only when self-hosting embeddings
 # (EMBED_PROVIDER=fashionsiglip):
 #   pip install -r requirements.txt -r requirements-ml.txt
-open_clip_torch==2.26.1
+open_clip_torch==3.3.0
 torch==2.4.1
