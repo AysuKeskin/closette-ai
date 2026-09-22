@@ -119,7 +119,14 @@ export function EditBeautyScreen() {
           }}
         />
 
-        <TextField label={text('beautyForm.productName')} value={productName} onChangeText={setProductName} />
+        <TextField
+          label={text('beautyForm.productName')}
+          value={productName}
+          onChangeText={setProductName}
+          multiline
+          scrollEnabled={false}
+          style={styles.productName}
+        />
         <TextField label={text('beautyForm.brand')} value={brand} onChangeText={setBrand} placeholder={text('beautyForm.brandPlaceholderCerave')} />
 
         <View>
@@ -169,6 +176,7 @@ export function EditBeautyScreen() {
 
 const styles = StyleSheet.create({
   form: { gap: spacing.lg, marginTop: spacing.md },
+  productName: { paddingVertical: spacing.md, textAlignVertical: 'top' },
   label: { marginBottom: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   ingredients: { minHeight: 90, paddingTop: spacing.md, textAlignVertical: 'top' },
