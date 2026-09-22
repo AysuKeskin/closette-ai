@@ -21,7 +21,7 @@ export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const user = useAuth((s) => s.user);
   const recent = useRecentItems(10);
-  const looks = useSavedLooks();
+  const looks = useSavedLooks(10);
   const prefs = useStylePreferences();
   const onboardingShown = useRef(false);
 

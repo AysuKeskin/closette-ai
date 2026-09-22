@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { toApiError } from '../../api/client';
-import { AppText, Button, Card, Chip, Header, Screen, TextField } from '../../components/ui';
+import { AppText, Button, Card, Chip, Header, PhotoField, Screen, TextField } from '../../components/ui';
 import { BEAUTY_CATEGORIES, BeautyCategory } from '../../api/types';
-import { useScanIngredients, useUpdateBeauty } from '../../features/beauty';
+import { useAnalyzeBeauty, useScanIngredients, useUpdateBeauty } from '../../features/beauty';
 import { useT } from '../../i18n';
 import { useDomainLabels } from '../../i18n/domain';
 import { spacing } from '../../theme';
@@ -25,6 +25,11 @@ export function EditBeautyScreen() {
   const item = useRoute<RouteProp<BeautyStackParamList, 'EditBeauty'>>().params.item;
   const update = useUpdateBeauty();
   const scan = useScanIngredients();
+  // /analyze is the upload path; the attributes it returns are for adding a new
+  // product, so only the key is taken here.
+  const upload = useAnalyzeBeauty();
+  const [photoUri, setPhotoUri] = useState<string | null>(item.imageUrl ?? null);
+  const [imageKey, setImageKey] = useState<string | null>(null);
 
   const [productName, setProductName] = useState(item.productName);
   const [brand, setBrand] = useState(item.brand ?? '');
@@ -83,6 +88,7 @@ export function EditBeautyScreen() {
           category,
           size: size.trim(),
           ingredients: splitList(ingredients),
+          ...(imageKey ? { imageKey } : {}),
         },
       },
       {
@@ -100,6 +106,19 @@ export function EditBeautyScreen() {
       <Header title={text('beautyForm.editTitle')} subtitle={text('beautyForm.editSubtitle')} onBack={() => navigation.goBack()} stackedBack />
 
       <View style={styles.form}>
+        <PhotoField
+          uri={photoUri}
+          busy={upload.isPending}
+          onPick={(asset) => {
+            setPhotoUri(asset.uri);
+            setNote(null);
+            upload.mutate(asset, {
+              onSuccess: (res) => setImageKey(res.imageKey),
+              onError: (err) => setError(toApiError(err).message),
+            });
+          }}
+        />
+
         <TextField label={text('beautyForm.productName')} value={productName} onChangeText={setProductName} />
         <TextField label={text('beautyForm.brand')} value={brand} onChangeText={setBrand} placeholder={text('beautyForm.brandPlaceholderCerave')} />
 

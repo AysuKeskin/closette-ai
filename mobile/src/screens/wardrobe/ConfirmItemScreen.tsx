@@ -62,6 +62,18 @@ export function ConfirmItemScreen() {
   const [size, setSize] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // What the colour pipeline measured, kept only while the user leaves the colours
+  // as they came. Once they type their own, a share taken from the photo would be
+  // attached to a colour nobody measured.
+  const measuredShares = useMemo(() => {
+    const details = ai.color_details ?? [];
+    if (!details.length) return undefined;
+    const asMeasured = details.map((d) => d.name).join(', ');
+    const asShown = details.map((d) => labels.color(d.name)).join(', ');
+    if (colors_.trim() !== asShown && colors_.trim() !== asMeasured) return undefined;
+    return details.map((d) => `${d.name}:${d.percentage}`);
+  }, [ai.color_details, colors_, labels]);
+
   const lowConfidence = useMemo(() => ai.confidence > 0 && ai.confidence < 0.75, [ai.confidence]);
 
   const onSave = () => {
@@ -76,6 +88,7 @@ export function ConfirmItemScreen() {
         category,
         subcategory: subcategory.trim() || undefined,
         colors: splitList(colors_).map(labels.canonical.color),
+        colorShares: measuredShares,
         pattern: pattern.trim() ? labels.canonical.pattern(pattern) : undefined,
         styles: splitList(styles_).map(labels.canonical.style),
         seasons: splitList(seasons).map(labels.canonical.season),

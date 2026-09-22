@@ -27,9 +27,16 @@ export function useDeleteLook() {
   });
 }
 
-export function useSavedLooks() {
+/**
+ * Saved looks, newest first.
+ *
+ * `limit` is for a screen that only shows a few: every look carries its pieces
+ * in full, so asking for all of them to fill one strip on Home downloads a year
+ * of outfits to draw three.
+ */
+export function useSavedLooks(limit?: number) {
   return useQuery({
-    queryKey: queryKeys.savedLooks,
-    queryFn: () => outfitApi.saved(),
+    queryKey: queryKeys.savedLooks(limit),
+    queryFn: () => outfitApi.saved(limit),
   });
 }

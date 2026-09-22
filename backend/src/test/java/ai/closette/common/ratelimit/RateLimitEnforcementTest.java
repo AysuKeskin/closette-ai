@@ -36,9 +36,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "closette.ratelimit.user.per-minute=1000",
         "closette.ratelimit.user.per-day=10",
         "closette.ratelimit.user.per-week=1000",
-        "closette.ratelimit.ip.per-minute=10000",
-        "closette.ratelimit.ip.per-day=10000",
-        "closette.ratelimit.ip.per-week=10000",
 })
 class RateLimitEnforcementTest {
 
@@ -94,7 +91,10 @@ class RateLimitEnforcementTest {
                         .content("{\"occasion\":\"akşam yemeği\"}"))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.error.message",
-                        is("Şimdilik yapay zekâ kotanı doldurdun — kısa süre içinde yenilenecek")));
+                        is("Şimdilik yapay zekâ kotanı doldurdun.")))
+                // The app appends the concrete wait from this header; the sentence
+                // stopped promising "shortly" once the real number was available.
+                .andExpect(header().exists("Retry-After"));
     }
 
     @Test
@@ -110,5 +110,27 @@ class RateLimitEnforcementTest {
                             .content("{\"signal\":\"LIKE\"}"))
                     .andExpect(status().isOk());
         }
+    }
+
+    @Test
+    void oneUserSpendingTheirBudgetDoesNotTouchAnotherOnTheSameAddress() throws Exception {
+        // Both requests arrive from the test client's single address. Turkish mobile
+        // carriers put thousands of real subscribers behind one, so charging the
+        // address would have the first active user spend the whole street's day.
+        String first = tokenForVerifiedUser();
+        String second = tokenForVerifiedUser();
+
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(post("/api/outfits/generate")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + first)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"occasion\":\"dinner\"}"));
+        }
+
+        mockMvc.perform(post("/api/outfits/generate")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + second)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"occasion\":\"dinner\"}"))
+                .andExpect(status().isOk());
     }
 }

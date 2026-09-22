@@ -264,6 +264,9 @@ public class RecommendationService {
             m.put("name", it.getName());
             m.put("category", it.getCategory().name().toLowerCase(Locale.ROOT));
             m.put("colors", it.getColors());
+            // What the piece actually reads as. Owning a navy-trimmed white shirt is
+            // not the same as owning a navy one, and the advice turns on that.
+            if (!it.getColorShares().isEmpty()) m.put("colorShares", it.getColorShares());
             m.put("styles", it.getStyles());
             out.add(m);
         }

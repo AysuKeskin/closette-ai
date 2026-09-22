@@ -154,6 +154,7 @@ public class WardrobeService {
         item.setCategory(req.category());
         item.setSubcategory(trimToNull(req.subcategory()));
         item.setColors(nullToEmpty(req.colors()));
+        item.setColorShares(sharesFor(req.colors(), req.colorShares()));
         item.setPattern(trimToNull(req.pattern()));
         item.setStyles(nullToEmpty(req.styles()));
         item.setSeasons(nullToEmpty(req.seasons()));
@@ -227,14 +228,37 @@ public class WardrobeService {
         if (req.name() != null && !req.name().isBlank()) item.setName(req.name().trim());
         if (req.category() != null) item.setCategory(req.category());
         if (req.subcategory() != null) item.setSubcategory(trimToNull(req.subcategory()));
-        if (req.colors() != null) item.setColors(req.colors());
+        if (req.colors() != null) {
+            item.setColors(req.colors());
+            // Hand-typed colours have no measurement behind them, so shares kept
+            // from the photo would describe a list that no longer matches.
+            item.setColorShares(sharesFor(req.colors(), item.getColorShares()));
+        }
         if (req.pattern() != null) item.setPattern(trimToNull(req.pattern()));
         if (req.styles() != null) item.setStyles(req.styles());
         if (req.seasons() != null) item.setSeasons(req.seasons());
         if (req.brand() != null) item.setBrand(trimToNull(req.brand()));
         if (req.size() != null) item.setSize(trimToNull(req.size()));
         if (req.favorite() != null) item.setFavorite(req.favorite());
+        replacePhoto(userId, item, req.imageKey());
         return toResponse(repository.save(item));
+    }
+
+    /**
+     * Swap in a photo the user just uploaded, and let go of the one it replaces.
+     *
+     * Order matters: the new key is claimed before the old one is released, so a
+     * failure on the way in cannot leave the item pointing at a photo already
+     * queued for deletion.
+     */
+    private void replacePhoto(UUID userId, WardrobeItem item, String newKey) {
+        if (newKey == null || newKey.isBlank()) return;
+        String current = item.getImageKey();
+        if (newKey.equals(current)) return;
+        ai.closette.storage.service.ImageRegistry.requireOwnedKey(userId, newKey);
+        storage.claim(storage.wardrobeBucket(), userId, newKey);
+        item.setImageKey(newKey);
+        storage.release(storage.wardrobeBucket(), userId, current);
     }
 
     @Transactional
@@ -303,6 +327,26 @@ public class WardrobeService {
         } catch (IOException e) {
             throw ApiException.validation(MessageKeys.IMAGE_UNREADABLE);
         }
+    }
+
+    /**
+     * Keeps the measurement for the colours it still describes.
+     *
+     * Removing a colour and adding one are not the same edit. Dropping "grey" from
+     * the list does not make "dark grey covers 78% of this" any less true, so that
+     * entry survives. Typing in a colour the pipeline never found does undermine
+     * the rest: the measurement missed something, so every proportion it reported
+     * is suspect and the whole set goes. A share pinned to the wrong colour would
+     * have the stylist harmonise a look around a colour nobody measured.
+     */
+    private static List<String> sharesFor(List<String> colors, List<String> shares) {
+        if (colors == null || shares == null || shares.isEmpty()) return List.of();
+        List<String> wanted = colors.stream().map(String::trim).toList();
+        List<String> measured = shares.stream().map(e -> e.split(":", 2)[0].trim()).toList();
+        if (!measured.containsAll(wanted)) return List.of();   // a colour was added
+        return shares.stream()
+                .filter(e -> wanted.contains(e.split(":", 2)[0].trim()))
+                .toList();
     }
 
     private static String trimToNull(String s) {

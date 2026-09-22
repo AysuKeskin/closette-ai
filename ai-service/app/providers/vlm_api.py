@@ -29,6 +29,21 @@ from app.schemas.analysis import BeautyAnalysis, ClothingAnalysis, IngredientExp
 
 log = logging.getLogger(__name__)
 
+# Output caps, per flow. Every one of these answers is a small JSON object, so a
+# long completion means the model is repeating itself or has lost the format —
+# and either way it is billed by the token. The cap turns a runaway answer into a
+# bounded, visible failure instead of a bill.
+_DEFAULT_MAX_OUTPUT = 400
+_MAX_OUTPUT = {
+    "analyze_clothing": 300,
+    "parse_clothing": 300,
+    "analyze_beauty": 300,
+    "extract_ingredients": 700,   # an ingredient list is genuinely long
+    "explain_ingredient": 300,
+    "generate_outfit": 500,       # ids, a title, a rationale and the plan
+    "buy_advice": 300,
+}
+
 # provider name -> (default base_url, default vision model). Models drift — set
 # VLM_MODEL to pin an exact one.
 PROVIDER_DEFAULTS = {
@@ -97,6 +112,10 @@ _STYLIST_SYS = (
     "You are a personal stylist. You are given an occasion and the user's OWNED wardrobe "
     "items (each with an id). Compose ONE complete, cohesive outfit using ONLY these items — "
     "never invent items or ids.\n"
+    "`dominantColor`, when a piece has one, is the colour covering most of it, measured from "
+    "the photograph. Harmonise around those rather than around the full colour list: a white "
+    "shirt with a navy collar lists both, but it wears as white. A piece without one is "
+    "genuinely multicoloured, so keep the rest of the look quiet around it.\n"
     "THINK FIRST, in this order, and put it in the \"plan\" field before choosing anything:\n"
     "1. How formal is this occasion? Answer with one of: casual, smart, formal.\n"
     "   - casual: coffee, groceries, a walk, the beach, a picnic, the cinema, a brunch.\n"
@@ -155,7 +174,10 @@ _BUY_SYS = (
     "user is thinking of buying, the similar items they ALREADY own, and computed compatibility "
     "scores, decide if it's worth buying. Favour their wardrobe's versatility over impulse: if "
     "they already own similar pieces, lean 'skip'; if it fills a gap and matches their style/"
-    "colours, lean 'buy'. Reply with ONLY JSON: {\"verdict\": \"buy\" | \"maybe\" | \"skip\", "
+    "colours, lean 'buy'. Where an owned piece carries `colorShares` (\"name:percent\", measured "
+    "from its photo), judge by what it actually reads as: three trousers that merely mention navy "
+    "is not the same as three that ARE navy, and only the second makes a fourth pointless. "
+    "Reply with ONLY JSON: {\"verdict\": \"buy\" | \"maybe\" | \"skip\", "
     "\"explanation\": one or two honest, friendly sentences}."
 )
 
@@ -190,7 +212,8 @@ class OpenAICompatibleVLM(AIProvider):
     # ---- public API ----
     def analyze_clothing(self, image: bytes, filename: str, lang: str = "en") -> ClothingAnalysis:
         system = _CLOTHING_SYS + " " + subcategory_instruction(lang)
-        data = self._vision_json(system, "Analyze this clothing item.", image, filename)
+        data = self._vision_json(system, "Analyze this clothing item.", image, filename,
+                                 operation="analyze_clothing")
         return ClothingAnalysis(
             category=str(data.get("category", "top")).lower(),
             subcategory=str(data.get("subcategory", "")),
@@ -202,7 +225,8 @@ class OpenAICompatibleVLM(AIProvider):
         )
 
     def analyze_beauty(self, image: bytes, filename: str) -> BeautyAnalysis:
-        data = self._vision_json(_BEAUTY_SYS, "Identify this beauty product.", image, filename)
+        data = self._vision_json(_BEAUTY_SYS, "Identify this beauty product.", image, filename,
+                                 operation="analyze_beauty")
         return BeautyAnalysis(
             brand=str(data.get("brand", "")),
             product_name=str(data.get("productName") or data.get("product_name") or ""),
@@ -211,7 +235,8 @@ class OpenAICompatibleVLM(AIProvider):
         )
 
     def extract_ingredients(self, image: bytes, filename: str) -> list[str]:
-        data = self._vision_json(_INGREDIENTS_OCR_SYS, "Read the ingredient list.", image, filename)
+        data = self._vision_json(_INGREDIENTS_OCR_SYS, "Read the ingredient list.", image, filename,
+                                 operation="extract_ingredients")
         items = data.get("ingredients", [])
         return [str(x).strip() for x in items if str(x).strip()][:60]
 
@@ -222,6 +247,8 @@ class OpenAICompatibleVLM(AIProvider):
                 {"role": "user", "content": description},
             ],
             json_mode=True,
+            operation="parse_clothing",
+            max_output_tokens=_MAX_OUTPUT["parse_clothing"],
         )
         data = _extract_json(content)
         return ClothingAnalysis(
@@ -243,7 +270,7 @@ class OpenAICompatibleVLM(AIProvider):
                 "cosmetic ingredient used in formulations. Output only the sentence. "
                 + prompt_instruction(lang))},
             {"role": "user", "content": f"Define this cosmetic ingredient: {name}"},
-        ])
+        ], operation="explain_ingredient", max_output_tokens=_MAX_OUTPUT["explain_ingredient"])
         return IngredientExplanation(name=name, explanation=content.strip())
 
     def generate_outfit(self, occasion: str, items: list[dict], preferences: list[str],
@@ -260,6 +287,8 @@ class OpenAICompatibleVLM(AIProvider):
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
             json_mode=True,
+            operation="generate_outfit",
+            max_output_tokens=_MAX_OUTPUT["generate_outfit"],
             # Taste, not fact: at 0 every ask returns the same look forever.
             temperature=0.8,
         )
@@ -288,6 +317,8 @@ class OpenAICompatibleVLM(AIProvider):
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
             json_mode=True,
+            operation="buy_advice",
+            max_output_tokens=_MAX_OUTPUT["buy_advice"],
         )
         data = _extract_json(content)
         verdict = str(data.get("verdict") or "maybe").lower()
@@ -296,7 +327,8 @@ class OpenAICompatibleVLM(AIProvider):
         return {"verdict": verdict, "explanation": str(data.get("explanation") or "")}
 
     # ---- internals ----
-    def _vision_json(self, system: str, prompt: str, image: bytes, filename: str) -> dict:
+    def _vision_json(self, system: str, prompt: str, image: bytes, filename: str,
+                     operation: str = "unknown") -> dict:
         # Cost lever: the VLM only needs to *recognise* the item, so we send a
         # small JPEG at low detail. Colour/similarity use the full image locally.
         small = _shrink(image)
@@ -310,14 +342,27 @@ class OpenAICompatibleVLM(AIProvider):
                 {"role": "user", "content": [{"type": "text", "text": prompt}, image_part]},
             ],
             json_mode=True,
+            operation=operation,
+            max_output_tokens=_MAX_OUTPUT.get(operation, _DEFAULT_MAX_OUTPUT),
         )
         return _extract_json(content)
 
-    def _chat(self, messages: list, json_mode: bool = False, temperature: float = 0.0) -> str:
+    def _chat(self, messages: list, json_mode: bool = False, temperature: float = 0.0,
+              operation: str = "unknown", max_output_tokens: int = _DEFAULT_MAX_OUTPUT) -> str:
         """Cataloguing calls keep temperature 0 so the same photo always catalogues
         the same way. Styling is a matter of taste, not fact: at 0 the same wardrobe
-        and occasion return one identical outfit forever, so those callers raise it."""
-        payload: dict = {"model": self.model, "messages": messages, "temperature": temperature}
+        and occasion return one identical outfit forever, so those callers raise it.
+
+        Every call is capped and counted. A model that rambles is billed for the
+        rambling, and until the tokens are recorded there is no answer to "what does
+        one outfit cost", which is the number any paid allowance has to be built on.
+        """
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_output_tokens,
+        }
         if json_mode and self.provider in ("openai", "openrouter"):
             payload["response_format"] = {"type": "json_object"}
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
@@ -329,19 +374,54 @@ class OpenAICompatibleVLM(AIProvider):
             if r.status_code >= 400:
                 log.warning("VLM %s HTTP %s: %s", self.model, r.status_code, r.text[:600])
             r.raise_for_status()
-            return r.json()["choices"][0]["message"]["content"]
+            body = r.json()
+        self._record_usage(operation, body)
+        return body["choices"][0]["message"]["content"]
+
+    def _record_usage(self, operation: str, body: dict) -> None:
+        """
+        Log what the provider says the call cost, in tokens.
+
+        Logged rather than returned because the callers' contracts are the app's
+        schemas, and a usage field has no place in a garment. The line is
+        machine-readable on purpose: it is the raw material for the per-operation
+        cost measurement, and no prompt, photo or user content goes into it.
+        """
+        usage = body.get("usage") or {}
+        if not usage:
+            return
+        finish = ((body.get("choices") or [{}])[0] or {}).get("finish_reason")
+        if finish == "length":
+            # The answer was cut off by our own cap, so the result is probably
+            # truncated JSON. Worth knowing before it looks like a model failure.
+            log.warning("VLM %s hit the output cap on %s", self.model, operation)
+        log.info(
+            "vlm_usage operation=%s model=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s",
+            operation, self.model,
+            usage.get("prompt_tokens"), usage.get("completion_tokens"), usage.get("total_tokens"),
+        )
 
 
 def _shrink(image: bytes, max_side: int = 512) -> bytes:
-    """Downscale to a small JPEG to minimise vision-token cost."""
+    """
+    Downscale to a small JPEG to minimise vision-token cost.
+
+    Raises when the bytes cannot be decoded rather than passing them through.
+    The caller labels the result `data:image/jpeg`, so returning whatever arrived
+    tells the API the wrong format about it: an undecodable photo came back as a
+    400 "unsupported image" from the provider, which reads as a broken key or a
+    spent quota rather than as a file we never managed to open.
+    """
     try:
         img = Image.open(io.BytesIO(image)).convert("RGB")
-        img.thumbnail((max_side, max_side))
-        out = io.BytesIO()
-        img.save(out, "JPEG", quality=85)
-        return out.getvalue()
-    except Exception:
-        return image
+    except Exception as e:  # noqa: BLE001 — any decode failure, not just one kind
+        raise ValueError(
+            f"could not decode the image ({e}); a HEIC photo needs pillow-heif installed"
+        ) from e
+    img.thumbnail((max_side, max_side))
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=85)
+    return out.getvalue()
 
 
 def _extract_json(text: str) -> dict:

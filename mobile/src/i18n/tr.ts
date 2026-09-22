@@ -174,6 +174,7 @@ export const tr: Dictionary = {
     addTitle: 'Parça ekle',
     addSubtitle: 'Fotoğrafını çek, detayları biz dolduralım',
     pickPrompt: 'Fotoğraf çek ya da galerinden seç',
+    photo: 'Fotoğraf',
     takePhoto: 'Fotoğraf çek',
     chooseFromLibrary: 'Galeriden seç',
     analyzing: 'Parçan inceleniyor…',
@@ -461,6 +462,10 @@ export const tr: Dictionary = {
 
   errors: {
     network: 'Sunucuya ulaşılamadı. Bağlantını kontrol et.',
+    retryMinutes: 'Yaklaşık {count} dakika içinde yenilenecek.',
+    retryMinutes_other: 'Yaklaşık {count} dakika içinde yenilenecek.',
+    retryHours: 'Yaklaşık {count} saat içinde yenilenecek.',
+    retryHours_other: 'Yaklaşık {count} saat içinde yenilenecek.',
     timeout: 'İstek zaman aşımına uğradı. Tekrar dene.',
     generic: 'Bir şeyler ters gitti.',
   },

@@ -215,7 +215,7 @@ class BeautyServiceTest {
         BeautyItemResponse created = beautyService.create(userId, request("Cream", BeautyCategory.SKINCARE));
 
         BeautyItemResponse updated = beautyService.update(userId, created.id(),
-                new UpdateBeautyItemRequest(null, "Rich Cream", null, "100ml", null, true));
+                new UpdateBeautyItemRequest(null, "Rich Cream", null, "100ml", null, true, null));
 
         assertThat(updated.productName()).isEqualTo("Rich Cream");
         assertThat(updated.size()).isEqualTo("100ml");
@@ -230,7 +230,7 @@ class BeautyServiceTest {
         BeautyItemResponse created = beautyService.create(owner, request("Cream", BeautyCategory.SKINCARE));
 
         assertNotFound(() -> beautyService.update(stranger, created.id(),
-                new UpdateBeautyItemRequest(null, "Hijacked", null, null, null, null)));
+                new UpdateBeautyItemRequest(null, "Hijacked", null, null, null, null, null)));
     }
 
     @Test

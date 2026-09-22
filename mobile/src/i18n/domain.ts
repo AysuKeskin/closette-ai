@@ -45,6 +45,7 @@ const SEASON: Record<string, Record<Language, string>> = {
 const COLOR: Record<string, Record<Language, string>> = {
   black: { en: 'Black', tr: 'Siyah' },
   charcoal: { en: 'Charcoal', tr: 'Antrasit' },
+  'dark grey': { en: 'Dark grey', tr: 'Koyu gri' },
   grey: { en: 'Grey', tr: 'Gri' },
   silver: { en: 'Silver', tr: 'Gümüş' },
   white: { en: 'White', tr: 'Beyaz' },

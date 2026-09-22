@@ -210,7 +210,7 @@ def test_the_clothing_prompt_carries_the_subcategory_language(set_env, monkeypat
     client = OpenAICompatibleVLM("openai")
     seen = {}
 
-    def fake_vision(system, user, image, filename):
+    def fake_vision(system, user, image, filename, operation="unknown"):
         seen["system"] = system
         return {}
 

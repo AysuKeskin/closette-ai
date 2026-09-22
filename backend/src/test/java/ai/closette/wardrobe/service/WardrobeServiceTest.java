@@ -63,7 +63,7 @@ class WardrobeServiceTest {
 
         CreateItemRequest req = new CreateItemRequest(
                 "Black mini dress", ClothingCategory.DRESSES, "mini dress",
-                List.of("black"), "solid", List.of("minimal", "elegant"),
+                List.of("black"), null, "solid", List.of("minimal", "elegant"),
                 List.of("spring", "summer"), null, null, null, false);
 
         WardrobeItemResponse created = wardrobeService.create(userId, req);
@@ -99,7 +99,7 @@ class WardrobeServiceTest {
         UUID userId = newUser();
 
         WardrobeItemResponse created = wardrobeService.create(userId, new CreateItemRequest(
-                "  Silk blouse  ", ClothingCategory.TOPS, "   ", List.of("cream"), "  ",
+                "  Silk blouse  ", ClothingCategory.TOPS, "   ", List.of("cream"), null, "  ",
                 List.of(), List.of(), "   ", "  ", "   ", null));
 
         assertThat(created.name()).isEqualTo("Silk blouse");
@@ -115,7 +115,7 @@ class WardrobeServiceTest {
         UUID userId = newUser();
 
         WardrobeItemResponse created = wardrobeService.create(userId, new CreateItemRequest(
-                "Trench coat", ClothingCategory.OUTERWEAR, null, null, null, null, null,
+                "Trench coat", ClothingCategory.OUTERWEAR, null, null, null, null, null, null,
                 null, null, null, null));
 
         assertThat(created.colors()).isEmpty();
@@ -127,7 +127,7 @@ class WardrobeServiceTest {
     void colorAndSeasonFiltersIgnoreCase() {
         UUID userId = newUser();
         wardrobeService.create(userId, new CreateItemRequest(
-                "Navy blazer", ClothingCategory.OUTERWEAR, null, List.of("navy"), "solid",
+                "Navy blazer", ClothingCategory.OUTERWEAR, null, List.of("navy"), null, "solid",
                 List.of("classic"), List.of("fall"), null, null, null, null));
 
         assertThat(wardrobeService.list(userId, new WardrobeFilter(null, "NAVY", null, null, null, null))).hasSize(1);
@@ -139,7 +139,7 @@ class WardrobeServiceTest {
     void brandAndSearchFiltersIgnoreCase() {
         UUID userId = newUser();
         wardrobeService.create(userId, new CreateItemRequest(
-                "Wool Coat", ClothingCategory.OUTERWEAR, null, List.of("camel"), "solid",
+                "Wool Coat", ClothingCategory.OUTERWEAR, null, List.of("camel"), null, "solid",
                 List.of("classic"), List.of("winter"), "Arket", null, null, null));
 
         assertThat(wardrobeService.list(userId, new WardrobeFilter(null, null, null, "arket", null, null))).hasSize(1);
@@ -165,11 +165,11 @@ class WardrobeServiceTest {
     void updateOnlyAppliesTheFieldsThatWereSent() {
         UUID userId = newUser();
         WardrobeItemResponse created = wardrobeService.create(userId, new CreateItemRequest(
-                "Midi skirt", ClothingCategory.BOTTOMS, "midi", List.of("beige"), "solid",
+                "Midi skirt", ClothingCategory.BOTTOMS, "midi", List.of("beige"), null, "solid",
                 List.of("minimal"), List.of("fall"), "COS", "M", null, false));
 
         WardrobeItemResponse updated = wardrobeService.update(userId, created.id(),
-                new UpdateItemRequest(null, null, null, List.of("black"), null, null, null, null, null, true));
+                new UpdateItemRequest(null, null, null, List.of("black"), null, null, null, null, null, true, null));
 
         assertThat(updated.colors()).containsExactly("black");
         assertThat(updated.favorite()).isTrue();
@@ -188,7 +188,7 @@ class WardrobeServiceTest {
                 TestData.item("Ankle boots", ClothingCategory.SHOES, List.of("black"), List.of("edgy")));
 
         WardrobeItemResponse updated = wardrobeService.update(userId, created.id(),
-                new UpdateItemRequest("   ", null, null, null, null, null, null, null, null, null));
+                new UpdateItemRequest("   ", null, null, null, null, null, null, null, null, null, null));
 
         assertThat(updated.name()).isEqualTo("Ankle boots");
     }
@@ -247,7 +247,7 @@ class WardrobeServiceTest {
         assertThat(wardrobeService.list(stranger, NO_FILTER)).isEmpty();
         assertNotFound(() -> wardrobeService.get(stranger, itemId));
         assertNotFound(() -> wardrobeService.update(stranger, itemId,
-                new UpdateItemRequest("Hijacked", null, null, null, null, null, null, null, null, null)));
+                new UpdateItemRequest("Hijacked", null, null, null, null, null, null, null, null, null, null)));
         assertNotFound(() -> wardrobeService.toggleFavorite(stranger, itemId));
         assertNotFound(() -> wardrobeService.delete(stranger, itemId));
         // similar() checks ownership before it ever reaches the vector query.
@@ -266,7 +266,7 @@ class WardrobeServiceTest {
     void reCataloguingFillsTheTagsAndLeavesTheUsersOwnFieldsAlone() {
         UUID userId = TestData.newUser(authService);
         UUID id = wardrobeService.create(userId, new CreateItemRequest(
-                "Kalın yün kazak", ClothingCategory.TOPS, "kazak", List.of("grey"),
+                "Kalın yün kazak", ClothingCategory.TOPS, "kazak", List.of("grey"), null,
                 null, List.of(), List.of(), "Zara", "M", null, true)).id();
         when(aiService.parseClothingText(any())).thenReturn(new ClothingAnalysis(
                 "top", "kazak", List.of("grey"), List.of(), "solid", List.of("casual"),
@@ -320,7 +320,7 @@ class WardrobeServiceTest {
         // overwriting replaced what the photo showed with a guess.
         UUID userId = TestData.newUser(authService);
         UUID id = wardrobeService.create(userId, new CreateItemRequest(
-                "Mavi gömlek", ClothingCategory.TOPS, "gömlek", List.of("blue"),
+                "Mavi gömlek", ClothingCategory.TOPS, "gömlek", List.of("blue"), null,
                 "striped", List.of(), List.of(), null, null, null, false)).id();
         when(aiService.parseClothingText(any())).thenReturn(new ClothingAnalysis(
                 "top", "gömlek", List.of("blue"), List.of(), "solid", List.of("classic"),
@@ -338,7 +338,7 @@ class WardrobeServiceTest {
     void reCataloguingFillsAMissingPattern() {
         UUID userId = TestData.newUser(authService);
         UUID id = wardrobeService.create(userId, new CreateItemRequest(
-                "Çizgili gömlek", ClothingCategory.TOPS, "gömlek", List.of("blue"),
+                "Çizgili gömlek", ClothingCategory.TOPS, "gömlek", List.of("blue"), null,
                 null, List.of(), List.of(), null, null, null, false)).id();
         when(aiService.parseClothingText(any())).thenReturn(new ClothingAnalysis(
                 "top", "gömlek", List.of("blue"), List.of(), "striped", List.of("classic"),

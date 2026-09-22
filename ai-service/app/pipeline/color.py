@@ -17,6 +17,9 @@ from PIL import Image
 FASHION_COLORS: dict[str, str] = {
     "black": "#1C1C1C",
     "charcoal": "#3A3A3A",
+    # Fills the hole between grey and charcoal. Without a neutral at this
+    # lightness, a mid-grey garment measured closer to mauve than to any grey.
+    "dark grey": "#5E5E5E",
     "grey": "#9A9A9A",
     "silver": "#C4C4C4",
     "white": "#F7F7F5",
@@ -48,7 +51,8 @@ FASHION_COLORS: dict[str, str] = {
 }
 
 _MAX_DIM = 160            # downscale for speed; colour doesn't need resolution
-_BG_DELTA = 14.0         # LAB distance under which a pixel counts as "background"
+_BG_DELTA = 14.0         # ceiling for the background distance on a noisy backdrop
+_BG_DELTA_FLOOR = 4.0    # …and its floor, for a clean one
 _MIN_SHARE = 0.06        # ignore colours below 6% of the garment
 
 # Shading, not colour: a shadow lowers a pixel's lightness while leaving it about as
@@ -57,7 +61,12 @@ _MIN_SHARE = 0.06        # ignore colours below 6% of the garment
 # which is what keeps a navy-and-white piece from being read as white with shadows.
 _SHADOW_DROP_L = 15.0     # lightness below the garment's own bright end
 _SHADOW_MAX_CHROMA = 12.0 # above this, the pixel is a colour rather than a shadow
-_SHADOW_MAX_SHARE = 0.70  # never read a garment from a highlight alone
+_SHADOW_MAX_SHARE = 0.50  # the lit part has to be the majority, not a stripe
+# At 0.70 a pinstripe defeated this: the thin light stripes set the bright
+# reference, the fabric between them sat far enough below it to look shadowed,
+# and two thirds of the garment was thrown away — leaving the stripes to name
+# the colour. Reading a garment from a minority of its own pixels is the thing
+# to refuse; a shadow that large means the reference is not the garment either.
 
 
 def _hex_to_rgb(h: str) -> tuple[int, int, int]:
@@ -103,6 +112,29 @@ def _load_rgb(image_bytes: bytes) -> tuple[np.ndarray, np.ndarray | None]:
     return np.asarray(img, dtype=float) / 255.0, None
 
 
+def _border_modes(border: np.ndarray, delta: np.floating | float, limit: int = 3) -> list[np.ndarray]:
+    """
+    The handful of colours the frame's edge is actually made of.
+
+    Greedy and deliberately crude: take the most common colour, drop everything
+    near it, repeat. A wall, a bedsheet and a pillow is three answers, and the
+    median of all three is a colour that is none of them.
+    """
+    modes: list[np.ndarray] = []
+    rest = border
+    for _ in range(limit):
+        if rest.size == 0:
+            break
+        mode = np.median(rest, axis=0)
+        modes.append(mode)
+        keep = np.linalg.norm(rest - mode, axis=1) > delta
+        # Anything left has to be a real presence, not a few edge pixels.
+        if keep.mean() < 0.15:
+            break
+        rest = rest[keep]
+    return modes
+
+
 def _foreground_mask(lab: np.ndarray, alpha: np.ndarray | None) -> np.ndarray:
     """Boolean HxW mask of garment pixels. Uses the alpha channel when present
     (e.g. after background removal); otherwise estimates the background colour
@@ -117,6 +149,21 @@ def _foreground_mask(lab: np.ndarray, alpha: np.ndarray | None) -> np.ndarray:
     ])
     bg = np.median(border, axis=0)
 
+    # How far "the same colour as the backdrop" reaches, measured from the backdrop
+    # itself rather than fixed. A clean sheet varies by almost nothing, so a cream
+    # garment sitting 7 units away from white is plainly not the sheet; a noisy or
+    # shaded backdrop varies by more and needs the wider margin. One fixed number
+    # could not serve both: at 14 a cream garment on a white bed was read as part
+    # of the bed, and the frame came back mostly "white".
+    spread = float(np.median(np.linalg.norm(border - bg, axis=1)))
+    delta = min(_BG_DELTA, max(_BG_DELTA_FLOOR, 3.0 * spread))
+
+    # Real rooms rarely offer one backdrop. A photo taken on a bed usually catches
+    # the wall above it and a pillow beside it, and a single median lands on
+    # whichever covers most of the frame — the other two then survive as "garment"
+    # and turn up in the answer, a wall arriving as "beige" next to the trousers.
+    backdrops = _border_modes(border, delta)
+
     # A border colour only means "backdrop" if the middle of the frame differs from
     # it. A white shirt shot on a white bed has the same colour at both, and treating
     # that as background deletes the garment's main colour — the shirt comes back as
@@ -124,11 +171,17 @@ def _foreground_mask(lab: np.ndarray, alpha: np.ndarray | None) -> np.ndarray:
     cy, cx = h // 2, w // 2
     ch, cw = max(1, h // 6), max(1, w // 6)
     centre = np.median(lab[cy - ch:cy + ch, cx - cw:cx + cw].reshape(-1, 3), axis=0)
-    if np.linalg.norm(centre - bg) <= _BG_DELTA:
+    if np.linalg.norm(centre - bg) <= delta:
         return np.ones((h, w), dtype=bool)
 
-    dist = np.linalg.norm(lab - bg, axis=-1)
-    mask = dist > _BG_DELTA
+    # Far from every backdrop, not just the biggest one.
+    mask = np.ones(lab.shape[:2], dtype=bool)
+    for backdrop in backdrops:
+        # A backdrop the middle of the frame shares is the garment's own colour, and
+        # removing it would delete the piece. Leave that one in.
+        if np.linalg.norm(centre - backdrop) <= delta:
+            continue
+        mask &= np.linalg.norm(lab - backdrop, axis=-1) > delta
     if mask.mean() < 0.05:  # no clear background (flat-lay / full-frame) → use all
         return np.ones((h, w), dtype=bool)
     return mask

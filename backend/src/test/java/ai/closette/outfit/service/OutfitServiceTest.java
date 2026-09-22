@@ -276,7 +276,7 @@ class OutfitServiceTest {
         assertThat(saved.items()).extracting(WardrobeItemResponse::name)
                 .containsExactlyInAnyOrder("Mini dress", "Ankle boots");
         // Rationale must survive the round-trip through the list query, not just the save call.
-        assertThat(outfitService.list(userId, null, null))
+        assertThat(outfitService.list(userId, null, null, null))
                 .singleElement()
                 .satisfies(o -> assertThat(o.rationale()).isEqualTo("Elevated but comfortable for dinner."));
     }
@@ -290,9 +290,9 @@ class OutfitServiceTest {
         outfitService.save(userId, new SaveOutfitRequest("Worn look", "work", null, List.of(itemId), OutfitStatus.WORN));
         outfitService.toggleFavorite(userId, saved.id());
 
-        assertThat(outfitService.list(userId, OutfitStatus.WORN, null))
+        assertThat(outfitService.list(userId, OutfitStatus.WORN, null, null))
                 .extracting(OutfitResponse::title).containsExactly("Worn look");
-        assertThat(outfitService.list(userId, null, true))
+        assertThat(outfitService.list(userId, null, true, null))
                 .extracting(OutfitResponse::title).containsExactly("Saved look");
     }
 
@@ -349,7 +349,7 @@ class OutfitServiceTest {
 
         outfitService.delete(userId, saved.id());
 
-        assertThat(outfitService.list(userId, null, null)).isEmpty();
+        assertThat(outfitService.list(userId, null, null, null)).isEmpty();
     }
 
     @Test
@@ -360,7 +360,7 @@ class OutfitServiceTest {
         OutfitResponse saved = outfitService.save(owner,
                 new SaveOutfitRequest("Private look", "dinner", null, List.of(itemId), null));
 
-        assertThat(outfitService.list(stranger, null, null)).isEmpty();
+        assertThat(outfitService.list(stranger, null, null, null)).isEmpty();
         assertNotFound(() -> outfitService.toggleFavorite(stranger, saved.id()));
         assertNotFound(() -> outfitService.markWorn(stranger, saved.id()));
         assertNotFound(() -> outfitService.delete(stranger, saved.id()));
@@ -376,7 +376,7 @@ class OutfitServiceTest {
                 new SaveOutfitRequest("Date night", "dinner", null, List.of(keptId, removedId), null));
         wardrobeService.delete(userId, removedId);
 
-        assertThat(outfitService.list(userId, null, null))
+        assertThat(outfitService.list(userId, null, null, null))
                 .singleElement()
                 .satisfies(outfit -> assertThat(outfit.items())
                         .extracting(WardrobeItemResponse::name).containsExactly("Mini dress"));
@@ -549,5 +549,20 @@ class OutfitServiceTest {
         GeneratedLook look = outfitService.generate(userId, new GetReadyRequest("beach day", null, List.of()));
 
         assertThat(namesOf(look)).doesNotContain("Leather boots");
+    }
+
+    @Test
+    void askingForAFewSavedLooksReturnsTheNewestOnly() {
+        // Home shows a short strip. Every look carries its pieces in full, so
+        // returning all of them to draw three is bandwidth spent on rows nobody
+        // reads — and on a small server that is the bill.
+        UUID userId = TestData.newUser(authService);
+        for (int i = 0; i < 5; i++) {
+            outfitService.save(userId, new SaveOutfitRequest(
+                    "Look " + i, null, null, List.of(), null));
+        }
+
+        assertThat(outfitService.list(userId, null, null, 2)).hasSize(2);
+        assertThat(outfitService.list(userId, null, null, null)).hasSize(5);
     }
 }

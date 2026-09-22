@@ -72,15 +72,20 @@ closette:
     signed-url-ttl-minutes: 60
   ratelimit:
     mode: ${RATE_LIMIT_MODE:enforce}
+    # Per-user budgets are the real control: they bound what one account can spend.
     user:            { per-minute: 50,  per-day: 288, per-week: 900 }
     unverified-user: { per-minute: 20,  per-day: 30,  per-week: 60 }
-    ip:              { per-minute: 120, per-day: 900, per-week: 2500 }
     verify-code:     { per-minute: 5,   per-day: 20,  per-week: 40 }
-    register-ip:     { per-minute: 3,   per-day: 10,  per-week: 25 }
-    login-ip:        { per-minute: 10,  per-day: 200, per-week: 600 }
-    login-email:     { per-minute: 5,   per-day: 50,  per-week: 150 }
-    password-reset-ip:    { per-minute: 3, per-day: 15, per-week: 40 }
-    password-reset-email: { per-minute: 1, per-day: 5,  per-week: 15 }
+    # Per-IP budgets guard the signed-out endpoints, where there is no account yet.
+    # They are flood brakes, not rations: a Turkish mobile carrier puts thousands of
+    # real subscribers behind one address, so anything sized for a household turns
+    # away genuine people long before it inconveniences a script. What actually
+    # makes a fake account expensive is the verified email it needs.
+    register-ip:     { per-minute: 15,  per-day: 150,  per-week: 500 }
+    login-ip:        { per-minute: 20,  per-day: 2000, per-week: 6000 }
+    login-email:     { per-minute: 5,   per-day: 50,   per-week: 150 }
+    password-reset-ip:    { per-minute: 10, per-day: 100, per-week: 300 }
+    password-reset-email: { per-minute: 1,  per-day: 5,   per-week: 15 }
 
 springdoc:
   swagger-ui:

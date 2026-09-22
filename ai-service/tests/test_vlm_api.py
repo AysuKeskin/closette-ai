@@ -11,6 +11,7 @@ from app.providers.vlm_api import (
     PROVIDER_DEFAULTS,
     _as_float,
     _extract_json,
+    _MAX_OUTPUT,
     _shrink,
 )
 
@@ -66,8 +67,11 @@ def test_image_is_shrunk_to_a_small_jpeg():
     assert img.size == (256, 128)
 
 
-def test_unreadable_bytes_pass_through_shrink_untouched():
-    assert _shrink(b"not-an-image") == b"not-an-image"
+def test_unreadable_bytes_are_refused_rather_than_passed_on():
+    # This used to assert the opposite, and that is how a HEIC photo reached the
+    # provider wearing a JPEG label: the 400 that came back read as a bad key.
+    with pytest.raises(ValueError, match="could not decode"):
+        _shrink(b"not-an-image")
 
 
 def test_client_refuses_to_start_without_an_api_key(set_env):
@@ -156,3 +160,92 @@ def test_unusable_stylist_reply_yields_an_empty_look_for_the_caller_to_reject(se
     look = _stylist(monkeypatch, "I cannot help with that.").generate_outfit("dinner", [], [])
 
     assert look["itemIds"] == []
+
+
+def test_shrink_converts_a_real_image_to_jpeg():
+    from app.providers.vlm_api import _shrink
+
+    out = _shrink(jpeg_bytes())
+    assert out.startswith(b"\xff\xd8")  # JPEG magic number
+
+
+def _chat_client(set_env, monkeypatch, body: dict):
+    """A client whose HTTP round trip is replaced by one canned provider reply."""
+    set_env(VLM_API_KEY="test-key")
+    client = OpenAICompatibleVLM("openai")
+
+    sent: dict = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return body
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def post(self, url, json=None, headers=None):
+            sent.update(json or {})
+            return FakeResponse()
+
+    monkeypatch.setattr("app.providers.vlm_api.httpx.Client", lambda timeout=60: FakeClient())
+    return client, sent
+
+
+def test_every_call_caps_its_own_output(set_env, monkeypatch):
+    """
+    An uncapped answer is billed by the token however long it runs.
+
+    Each of these flows returns a small JSON object, so a long completion means
+    the model lost the format — and the cap turns that into a bounded, visible
+    failure rather than a bill.
+    """
+    client, sent = _chat_client(set_env, monkeypatch, {
+        "choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1200, "completion_tokens": 90, "total_tokens": 1290},
+    })
+
+    client.generate_outfit("dinner", [], [], "en")
+
+    assert sent["max_tokens"] == _MAX_OUTPUT["generate_outfit"]
+
+
+def test_the_tokens_a_call_spent_are_logged_against_its_operation(set_env, monkeypatch, caplog):
+    """
+    Without this line there is no answer to "what does one outfit cost", and no
+    paid allowance can be priced on a number nobody measured.
+    """
+    client, _ = _chat_client(set_env, monkeypatch, {
+        "choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 6000, "completion_tokens": 1200, "total_tokens": 7200},
+    })
+
+    with caplog.at_level(logging.INFO, logger="app.providers.vlm_api"):
+        client.generate_outfit("gala", [], [], "en")
+
+    assert "vlm_usage" in caplog.text
+    assert "operation=generate_outfit" in caplog.text
+    assert "prompt_tokens=6000" in caplog.text
+    assert "completion_tokens=1200" in caplog.text
+
+
+def test_an_answer_cut_off_by_the_cap_says_so(set_env, monkeypatch, caplog):
+    # Truncated JSON otherwise reads as the model failing, and the real cause —
+    # our own ceiling — is invisible.
+    client, _ = _chat_client(set_env, monkeypatch, {
+        "choices": [{"message": {"content": '{"itemIds": ['}, "finish_reason": "length"}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 500, "total_tokens": 600},
+    })
+
+    with caplog.at_level(logging.WARNING, logger="app.providers.vlm_api"):
+        client.generate_outfit("dinner", [], [], "en")
+
+    assert "hit the output cap" in caplog.text

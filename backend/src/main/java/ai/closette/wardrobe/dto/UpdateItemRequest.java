@@ -15,6 +15,8 @@ public record UpdateItemRequest(
         List<String> seasons,
         String brand,
         String size,
-        Boolean favorite
+        Boolean favorite,
+        /** A key from a fresh /analyze upload. Null leaves the current photo alone. */
+        String imageKey
 ) {
 }

@@ -34,6 +34,17 @@ public class WardrobeItem extends BaseEntity {
     @Column(name = "colors", length = 500)
     private List<String> colors = new ArrayList<>();
 
+    /**
+     * Measured shares as "name:percent", in the same order as {@link #colors}.
+     *
+     * Empty whenever the colours were edited by hand: a share read off a photo
+     * describes that photo, and once somebody types a colour in there is nothing
+     * honest to say about how much of the garment it covers.
+     */
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "color_shares", length = 500)
+    private List<String> colorShares = new ArrayList<>();
+
     @Column(name = "pattern")
     private String pattern;
 
@@ -98,6 +109,14 @@ public class WardrobeItem extends BaseEntity {
 
     public void setColors(List<String> colors) {
         this.colors = colors;
+    }
+
+    public List<String> getColorShares() {
+        return colorShares;
+    }
+
+    public void setColorShares(List<String> colorShares) {
+        this.colorShares = colorShares == null ? new ArrayList<>() : colorShares;
     }
 
     public String getPattern() {

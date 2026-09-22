@@ -2,7 +2,7 @@ import axios, { AxiosError, AxiosHeaders } from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-import { translate } from '../i18n';
+import { translate, translatePlural } from '../i18n';
 import { useAuth, setSessionRevoker } from '../store/auth';
 import { currentLanguage } from '../store/locale';
 import { ensureAiConsent, needsAiConsent } from './consent';
@@ -124,13 +124,38 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Adds the concrete wait to a refusal that carries one.
+ *
+ * The server has been sending `Retry-After` on every 429 and the client dropped
+ * it, so the user read "it refreshes shortly" whether the wait was two minutes or
+ * most of a day. Telling them the real number is the difference between a limit
+ * and a shrug.
+ */
+function withRetryTime(message: string, err: AxiosError): string {
+  const header = err.response?.headers?.['retry-after'];
+  const seconds = Number(header);
+  if (!Number.isFinite(seconds) || seconds <= 0) return message;
+  const language = currentLanguage();
+  const minutes = Math.ceil(seconds / 60);
+  const hours = Math.ceil(minutes / 60);
+  // English needs the plural form; Turkish keeps the noun singular after a numeral.
+  const when =
+    minutes < 60
+      ? translatePlural(language, 'errors.retryMinutes', minutes)
+      : translatePlural(language, 'errors.retryHours', hours);
+  return `${message} ${when}`;
+}
+
 /** Normalizes any thrown value (axios/envelope) into an ApiError. */
 export function toApiError(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
   if (axios.isCancel(err)) return new ApiError('CANCELED', err.message || translate(currentLanguage(), 'consent.declined'));
   if (axios.isAxiosError(err)) {
     const envelope = err.response?.data as ApiEnvelope<unknown> | undefined;
-    if (envelope?.error) return new ApiError(envelope.error.code, envelope.error.message);
+    if (envelope?.error) {
+      return new ApiError(envelope.error.code, withRetryTime(envelope.error.message, err));
+    }
     const language = currentLanguage();
     if (err.code === 'ECONNABORTED') {
       return new ApiError('TIMEOUT', translate(language, 'errors.timeout'));

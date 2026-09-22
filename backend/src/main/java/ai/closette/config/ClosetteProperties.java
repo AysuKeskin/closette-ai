@@ -210,13 +210,6 @@ public class ClosetteProperties {
             this.unverifiedUser = unverifiedUser;
         }
 
-        public Window getIp() {
-            return ip;
-        }
-
-        public void setIp(Window ip) {
-            this.ip = ip;
-        }
 
         public Window getVerifyCode() {
             return verifyCode;

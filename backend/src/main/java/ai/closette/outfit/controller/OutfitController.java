@@ -49,8 +49,9 @@ public class OutfitController {
     @GetMapping
     public ApiResponse<List<OutfitResponse>> list(
             @RequestParam(required = false) OutfitStatus status,
-            @RequestParam(required = false) Boolean favorite) {
-        return ApiResponse.ok(service.list(SecurityUtil.currentUserId(), status, favorite));
+            @RequestParam(required = false) Boolean favorite,
+            @RequestParam(required = false) Integer limit) {
+        return ApiResponse.ok(service.list(SecurityUtil.currentUserId(), status, favorite, limit));
     }
 
     @PatchMapping("/{id}/favorite")

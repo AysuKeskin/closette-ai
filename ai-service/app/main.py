@@ -1,9 +1,20 @@
+import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.routers import analyze, embed, generate, image, ingredients
+
+# Uvicorn configures its own loggers and leaves the application's at WARNING, so
+# anything this service reports about itself — what a model call cost, which
+# provider answered — was written and then dropped. Measurement nobody can read
+# is worse than none: it looks like it exists.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 @asynccontextmanager
 async def lifespan(app):

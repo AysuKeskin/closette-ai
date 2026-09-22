@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * Get Ready + saved-look management (FR-07, FR-08, FR-14). The MVP look generator
@@ -321,9 +322,23 @@ public class OutfitService {
                     i.getName(),
                     i.getCategory().name().toLowerCase(),
                     i.getSubcategory(),
-                    i.getColors(), i.getStyles(), i.getSeasons()));
+                    i.getColors(), dominantColor(i), i.getStyles(), i.getSeasons()));
         }
         return out;
+    }
+
+    /** The measured colour covering at least half the piece; null when none does. */
+    private static String dominantColor(WardrobeItem item) {
+        for (String share : item.getColorShares()) {
+            String[] parts = share.split(":", 2);
+            if (parts.length != 2) continue;
+            try {
+                if (Integer.parseInt(parts[1].trim()) >= 50) return parts[0].trim();
+            } catch (NumberFormatException ignored) {
+                // A malformed entry is not worth failing a whole suggestion over.
+            }
+        }
+        return null;
     }
 
     private static boolean notBlank(String s) {
@@ -341,8 +356,16 @@ public class OutfitService {
         return toResponse(outfitRepository.save(outfit));
     }
 
+    /**
+     * Saved looks, newest first.
+     *
+     * @param limit how many to return, or null for all of them. Home asks for a
+     *              handful because that is all it shows; every look carries its
+     *              pieces in full, so returning a year of them to fill one strip
+     *              is bandwidth and heap spent on rows nobody reads.
+     */
     @Transactional(readOnly = true)
-    public List<OutfitResponse> list(UUID userId, OutfitStatus status, Boolean favorite) {
+    public List<OutfitResponse> list(UUID userId, OutfitStatus status, Boolean favorite, Integer limit) {
         List<Outfit> outfits;
         if (Boolean.TRUE.equals(favorite)) {
             outfits = outfitRepository.findByUserIdAndFavoriteTrueOrderByCreatedAtDesc(userId);
@@ -351,7 +374,9 @@ public class OutfitService {
         } else {
             outfits = outfitRepository.findByUserIdOrderByCreatedAtDesc(userId);
         }
-        return outfits.stream().map(this::toResponse).toList();
+        Stream<Outfit> stream = outfits.stream();
+        if (limit != null) stream = stream.limit(Math.max(1, limit));
+        return stream.map(this::toResponse).toList();
     }
 
     @Transactional

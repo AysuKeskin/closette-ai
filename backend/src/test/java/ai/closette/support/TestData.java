@@ -63,7 +63,7 @@ public final class TestData {
     /** Same, with the seasons spelled out — for tests about when a piece is worn. */
     public static CreateItemRequest item(String name, ClothingCategory category, List<String> colors,
                                          List<String> styles, List<String> seasons) {
-        return new CreateItemRequest(name, category, null, colors, "solid", styles,
+        return new CreateItemRequest(name, category, null, colors, null, "solid", styles,
                 seasons, null, null, null, false);
     }
 }

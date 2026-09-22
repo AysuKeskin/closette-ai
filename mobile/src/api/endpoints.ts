@@ -91,8 +91,12 @@ export type WardrobeQuery = {
   q?: string;
 };
 
-/** Partial update: only the fields present are applied, matching UpdateItemRequest. */
-export type UpdateItemPayload = Partial<Omit<CreateItemPayload, 'imageKey'>>;
+/**
+ * Partial update: only the fields present are applied, matching UpdateItemRequest.
+ * `imageKey` is included: editing can replace the photo, and the server then lets
+ * go of the one it replaced.
+ */
+export type UpdateItemPayload = Partial<CreateItemPayload>;
 
 /** What one re-catalogue run did; `remaining` is what the batch cap left behind. */
 export type RetagSummary = {
@@ -107,6 +111,12 @@ export type CreateItemPayload = {
   category: ClothingCategory;
   subcategory?: string;
   colors?: string[];
+  /**
+   * Measured shares as "name:percent", from the analysis. Sent only when the
+   * colours were left as measured: editing them by hand makes the shares
+   * describe a list that no longer matches, and the server drops them anyway.
+   */
+  colorShares?: string[];
   pattern?: string;
   styles?: string[];
   seasons?: string[];
@@ -244,8 +254,10 @@ export const outfitApi = {
     });
     return unwrap(data);
   },
-  async saved(): Promise<Outfit[]> {
-    const { data } = await api.get<Envelope<Outfit[]>>('/api/outfits');
+  async saved(limit?: number): Promise<Outfit[]> {
+    const { data } = await api.get<Envelope<Outfit[]>>('/api/outfits', {
+      params: limit ? { limit } : undefined,
+    });
     return unwrap(data);
   },
   async save(payload: {

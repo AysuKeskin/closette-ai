@@ -1,5 +1,9 @@
 """Colour extraction is classic code, so it is fully assertable: a known pixel
 value must always come back as the same fashion colour name."""
+import io
+
+from PIL import Image, ImageDraw
+
 from app.pipeline.color import FASHION_COLORS, extract_colors
 
 from tests.images import cutout_png, garment_on_background, shaded, solid_png, two_tone
@@ -109,3 +113,78 @@ def test_a_dark_colour_is_not_mistaken_for_a_shadow():
     names = [c["name"] for c in extract_colors(two_tone("#22314E", "#FFFFFF", accent_share=0.5))]
     assert sorted(names) == ["navy", "white"]
 
+
+
+def test_a_pale_garment_on_a_white_backdrop_keeps_its_own_colour():
+    """
+    Cream on a white sheet is the case a fixed background threshold cannot serve.
+
+    Widening it far enough to absorb a noisy backdrop also swallowed the garment,
+    and the frame came back as mostly "white" with the real colour second. The
+    threshold now scales with how much the backdrop itself varies, so a clean
+    sheet leaves a pale garment standing.
+    """
+    colors = extract_colors(garment_on_background("#F5F0E8", "#FFFFFF"))
+
+    assert colors, "the garment was read as part of the backdrop"
+    assert colors[0]["name"] == "cream"
+
+
+def test_a_garment_the_same_colour_as_the_backdrop_still_reports_that_colour():
+    # The opposite failure, and the reason the give-up branch exists: a white
+    # shirt on a white bed must not come back as nothing at all.
+    colors = extract_colors(garment_on_background("#FFFFFF", "#FFFFFF"))
+
+    assert colors
+    assert colors[0]["name"] == "white"
+
+
+def test_a_mid_grey_garment_is_named_a_grey_and_not_a_colour():
+    """
+    The neutral ladder used to jump from grey (L≈64) to charcoal (L≈24).
+
+    Anything in between measured closer to a chromatic colour than to any grey,
+    so mid-grey trousers catalogued as "mauve". The names are what the stylist
+    and the filters reason over, so this is not cosmetic.
+    """
+    for hex_colour in ("#6F6A66", "#707070", "#5A5A5A"):
+        top = extract_colors(solid_png(hex_colour))[0]["name"]
+        assert "grey" in top or top == "charcoal", f"{hex_colour} came back as {top}"
+
+
+def test_a_striped_garment_is_read_from_its_cloth_not_its_stripes():
+    """
+    Thin light stripes set the bright reference, the cloth between them sat far
+    enough below it to look shadowed, and two thirds of the garment was thrown
+    away — leaving the stripes to name the piece. The lit part now has to be the
+    majority before anything is dropped as shadow.
+    """
+    img = Image.new("RGB", (240, 240), "#6F6A66")
+    draw = ImageDraw.Draw(img)
+    for x in range(6, 240, 12):
+        draw.line([(x, 0), (x, 240)], fill="#D8D5D0", width=2)
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+
+    assert extract_colors(buf.getvalue())[0]["name"] == "dark grey"
+
+
+def test_a_second_backdrop_colour_does_not_become_one_of_the_garment_colours():
+    """
+    A photo on a bed usually catches the wall above it too.
+
+    A single background estimate lands on whichever surface covers most of the
+    frame, and the other survives as "garment": grey trousers came back with a
+    quarter of them beige, which was the wall.
+    """
+    img = Image.new("RGB", (240, 240), "#EFEDE9")   # bedsheet
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([0, 0, 240, 34], fill="#D6C9B4")  # wall along the top
+    draw.rectangle([70, 34, 170, 230], fill="#6F6A66")  # the garment
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+
+    names = [c["name"] for c in extract_colors(buf.getvalue())]
+
+    assert names[0] == "dark grey"
+    assert "beige" not in names, f"the wall was counted as the garment: {names}"

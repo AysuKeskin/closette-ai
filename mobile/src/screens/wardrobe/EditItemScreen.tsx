@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { toApiError } from '../../api/client';
-import { AppText, Button, Chip, Header, Screen, TextField } from '../../components/ui';
+import { AppText, Button, Chip, Header, PhotoField, Screen, TextField } from '../../components/ui';
 import { CLOTHING_CATEGORIES, ClothingCategory } from '../../api/types';
-import { useUpdateItem } from '../../features/wardrobe';
+import { useAnalyzeItem, useUpdateItem } from '../../features/wardrobe';
 import { useT } from '../../i18n';
 import { useDomainLabels } from '../../i18n/domain';
 import { spacing } from '../../theme';
@@ -22,6 +22,12 @@ export function EditItemScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<WardrobeStackParamList>>();
   const { item } = useRoute<RouteProp<WardrobeStackParamList, 'EditItem'>>().params;
   const update = useUpdateItem();
+  // Uploading is what /analyze already does; the attributes it also returns are
+  // ignored here, because the user is editing their own answers, not asking for
+  // new ones. Only the key matters.
+  const upload = useAnalyzeItem();
+  const [photoUri, setPhotoUri] = useState<string | null>(item.imageUrl ?? null);
+  const [imageKey, setImageKey] = useState<string | null>(null);
 
   // Catalogue values are stored in English and shown as labels, so the fields hold
   // labels while editing and are mapped back on save.
@@ -55,6 +61,7 @@ export function EditItemScreen() {
           seasons: splitList(seasons).map(labels.canonical.season),
           brand: brand.trim(),
           size: size.trim(),
+          ...(imageKey ? { imageKey } : {}),
         },
       },
       {
@@ -82,6 +89,18 @@ export function EditItemScreen() {
       />
 
       <View style={styles.form}>
+        <PhotoField
+          uri={photoUri}
+          busy={upload.isPending}
+          onPick={(asset) => {
+            setPhotoUri(asset.uri);
+            upload.mutate(asset, {
+              onSuccess: (res) => setImageKey(res.imageKey),
+              onError: (err) => setError(toApiError(err).message),
+            });
+          }}
+        />
+
         <TextField
           label={text('confirm.name')}
           value={name}

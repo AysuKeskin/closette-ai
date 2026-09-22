@@ -263,11 +263,11 @@ def test_cataloguing_is_deterministic_but_styling_is_not(set_env, monkeypatch):
     client = OpenAICompatibleVLM("openai")
     seen = {}
 
-    def fake_chat(messages, json_mode=False, temperature=0.0):
+    def fake_chat(messages, json_mode=False, temperature=0.0, **kwargs):
         seen[len(seen)] = temperature
         return '{"itemIds": [], "styles": [], "verdict": "skip"}'
 
-    def fake_vision(system, user, image, filename):
+    def fake_vision(system, user, image, filename, operation="unknown"):
         seen[len(seen)] = 0.0  # vision goes through _chat's default
         return {}
 

@@ -152,6 +152,8 @@ export type UpdateBeautyPayload = {
   size?: string;
   ingredients?: string[];
   favorite?: boolean;
+  /** A key from a fresh upload; omitted leaves the current photo alone. */
+  imageKey?: string;
 };
 
 export type GeneratedLook = {

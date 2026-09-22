@@ -11,6 +11,8 @@ public record UpdateBeautyItemRequest(
         BeautyCategory category,
         String size,
         List<String> ingredients,
-        Boolean favorite
+        Boolean favorite,
+        /** A key from a fresh /analyze upload. Null leaves the current photo alone. */
+        String imageKey
 ) {
 }

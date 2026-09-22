@@ -125,7 +125,7 @@ class WardrobeAnalyzeTest {
         when(aiService.embedItem(any(), any(), any())).thenThrow(new IllegalStateException("model down"));
 
         WardrobeItemResponse created = wardrobeService.create(userId, new CreateItemRequest(
-                "Navy dress", ClothingCategory.DRESSES, null, List.of("navy"), "solid",
+                "Navy dress", ClothingCategory.DRESSES, null, List.of("navy"), null, "solid",
                 List.of("minimal"), List.of("spring"), null, null, key, false));
 
         assertThat(created.id()).isNotNull();
@@ -139,7 +139,7 @@ class WardrobeAnalyzeTest {
         when(storage.download("wardrobe", key)).thenReturn(null);
 
         assertThatCode(() -> wardrobeService.create(userId, new CreateItemRequest(
-                "Navy dress", ClothingCategory.DRESSES, null, List.of("navy"), "solid",
+                "Navy dress", ClothingCategory.DRESSES, null, List.of("navy"), null, "solid",
                 List.of("minimal"), List.of("spring"), null, null, key, false)))
                 .doesNotThrowAnyException();
         verify(aiService, org.mockito.Mockito.never()).embedItem(any(), any(), any());

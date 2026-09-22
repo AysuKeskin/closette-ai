@@ -108,7 +108,26 @@ public class BeautyService {
         if (req.size() != null) item.setSize(trimToNull(req.size()));
         if (req.ingredients() != null) item.setIngredients(cleanIngredients(req.ingredients()));
         if (req.favorite() != null) item.setFavorite(req.favorite());
+        replacePhoto(userId, item, req.imageKey());
         return toResponse(repository.save(item));
+    }
+
+    /**
+     * Swap in a photo the user just uploaded, and let go of the one it replaces.
+     *
+     * Claim before release, so a failure on the way in cannot leave the item
+     * pointing at a photo already queued for deletion. A product that carried an
+     * external catalogue image now shows the user's own instead, so that URL goes.
+     */
+    private void replacePhoto(UUID userId, BeautyItem item, String newKey) {
+        if (newKey == null || newKey.isBlank()) return;
+        String current = item.getImageKey();
+        if (newKey.equals(current)) return;
+        ai.closette.storage.service.ImageRegistry.requireOwnedKey(userId, newKey);
+        storage.claim(storage.beautyBucket(), userId, newKey);
+        item.setImageKey(newKey);
+        item.setImageUrl(null);
+        storage.release(storage.beautyBucket(), userId, current);
     }
 
     /** OCR a photo of an ingredient list into cleaned ingredient names (best-effort; empty on failure). */

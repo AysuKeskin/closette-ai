@@ -170,6 +170,7 @@ export const en = {
     addTitle: 'Add an item',
     addSubtitle: "Snap it. We'll fill in the details",
     pickPrompt: 'Take a photo or choose one from your library',
+    photo: 'Photo',
     takePhoto: 'Take photo',
     chooseFromLibrary: 'Choose from library',
     analyzing: 'Analyzing your item…',
@@ -457,6 +458,10 @@ export const en = {
 
   errors: {
     network: 'Could not reach the server. Check your connection.',
+    retryMinutes: 'It refreshes in about {count} minute.',
+    retryMinutes_other: 'It refreshes in about {count} minutes.',
+    retryHours: 'It refreshes in about {count} hour.',
+    retryHours_other: 'It refreshes in about {count} hours.',
     timeout: 'The request timed out. Please try again.',
     generic: 'Something went wrong.',
   },

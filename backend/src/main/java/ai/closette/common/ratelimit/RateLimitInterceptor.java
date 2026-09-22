@@ -86,13 +86,20 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private Window ipWindow(RateLimitBucket bucket) {
         RateLimits config = limiter.config();
         return switch (bucket) {
-            case AI -> config.getIp();
+            // Signed-out endpoints have no user to charge, so the IP is all there is.
             case REGISTER -> config.getRegisterIp();
             case LOGIN -> config.getLoginIp();
             case PASSWORD_RESET -> config.getPasswordResetIp();
             // Already bounded per user, and a shared IP shouldn't stop someone
             // finishing their own sign-up.
             case VERIFY_CODE -> null;
+            // Same reasoning, and it matters more here. Model spending is bounded
+            // per user already; an IP ceiling adds no protection against cost, only
+            // against each other. Turkish mobile carriers put thousands of real
+            // subscribers behind one address, so a few active users would spend the
+            // whole street's allowance. Total spend belongs in a global cap, which
+            // knows what it is protecting; an IP does not.
+            case AI -> null;
         };
     }
 

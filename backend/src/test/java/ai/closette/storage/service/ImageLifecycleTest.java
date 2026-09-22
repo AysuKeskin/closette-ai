@@ -42,7 +42,7 @@ class ImageLifecycleTest {
         return storage.upload("wardrobe", user, new byte[]{1, 2, 3}, "image/jpeg", "item.jpg");
     }
     private CreateItemRequest item(String key) {
-        return new CreateItemRequest("Dress", ClothingCategory.DRESSES, null, List.of(), null,
+        return new CreateItemRequest("Dress", ClothingCategory.DRESSES, null, List.of(), null, null,
                 List.of(), List.of(), null, null, key, false);
     }
     private StoredImage tracked(String key) {

@@ -19,6 +19,11 @@ public record CreateItemRequest(
 
         String subcategory,
         List<String> colors,
+        /**
+         * Measured shares as "name:percent", straight from the analysis. Optional:
+         * an item typed in by hand has colours but no measurement behind them.
+         */
+        List<String> colorShares,
         String pattern,
         List<String> styles,
         List<String> seasons,

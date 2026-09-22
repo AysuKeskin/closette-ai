@@ -10,6 +10,9 @@ pytest==8.3.3
 # Colour extraction + canonical normalization run entirely on these.
 Pillow==12.3.0
 numpy==2.1.1
+# iPhone photos arrive as HEIC and the vision API rejects that format, so decoding
+# it is not optional for this app. A few MB, unlike the model extras below.
+pillow-heif==1.5.0
 
 # Heavy, OPTIONAL runtime extras (self-hosted embeddings + HEIC decoding) live in
 # requirements-ml.txt. The test suite never loads a model (mock provider) and its
