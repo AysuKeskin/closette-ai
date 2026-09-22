@@ -258,6 +258,7 @@ export const en = {
     searchTitle: 'Search products',
     searchSubtitle: 'Find a product by name',
     searchPlaceholder: 'e.g. CeraVe cleanser',
+    dataCredit: 'Product details and photos come from Open Beauty Facts, under ODbL and CC BY-SA.',
     searching: 'Searching…',
   },
 
@@ -355,6 +356,8 @@ export const en = {
     emailNotVerified: '• Email not verified',
     settings: 'SETTINGS',
     logOut: 'Log out',
+    dataSources: 'Data sources',
+    dataSourcesHint: 'Product details and photos from Open Beauty Facts, under ODbL and CC BY-SA',
     styleTakeTest: 'Take the test',
     stylePreferences: 'Style preferences',
     styleQuizPrompt: 'Take the quick style quiz',

@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 
 import { toApiError } from '../../api/client';
-import { AppText, Button, Card, Chip, Header, Screen, TextField } from '../../components/ui';
+import { AppText, Button, Card, Chip, DataCredit, Header, Screen, TextField } from '../../components/ui';
 import { BEAUTY_CATEGORIES, BeautyCategory } from '../../api/types';
 import { useCreateBeauty, useScanIngredients } from '../../features/beauty';
 import { useT } from '../../i18n';
@@ -166,6 +166,9 @@ export function ConfirmBeautyScreen() {
           ) : null}
         </View>
       </View>
+      {/* Only when the form was filled from the catalogue. Arriving here from a photo
+          the user took means none of this is Open Beauty Facts' work to credit. */}
+      {candidate ? <DataCredit /> : null}
     </Screen>
   );
 }

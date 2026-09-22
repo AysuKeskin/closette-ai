@@ -262,6 +262,7 @@ export const tr: Dictionary = {
     searchTitle: 'Ürün ara',
     searchSubtitle: 'Ürünü adıyla bul',
     searchPlaceholder: 'örn. CeraVe temizleyici',
+    dataCredit: 'Ürün bilgileri ve fotoğrafları Open Beauty Facts\'ten; ODbL ve CC BY-SA ile paylaşılıyor.',
     searching: 'Aranıyor…',
   },
 
@@ -359,6 +360,8 @@ export const tr: Dictionary = {
     emailNotVerified: '• E-posta doğrulanmadı',
     settings: 'AYARLAR',
     logOut: 'Çıkış yap',
+    dataSources: 'Veri kaynakları',
+    dataSourcesHint: 'Ürün bilgileri ve fotoğrafları Open Beauty Facts\'ten; ODbL ve CC BY-SA',
     styleTakeTest: 'Testi çöz',
     stylePreferences: 'Stil tercihlerin',
     styleQuizPrompt: 'Kısa stil testini çöz',

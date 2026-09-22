@@ -3,7 +3,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { FlatList, Image, Pressable, StyleSheet, View } from 'react-native';
 
-import { AppText, Button, Header, Icon, LoadingState, Screen, TextField } from '../../components/ui';
+import { AppText, Button, DataCredit, Header, Icon, LoadingState, Screen, TextField } from '../../components/ui';
 import type { BeautyProductCandidate } from '../../api/types';
 import { useBeautySearch } from '../../features/beauty';
 import { useT } from '../../i18n';
@@ -84,6 +84,8 @@ export function BeautySearchScreen() {
           </AppText>
         )
       ) : null}
+
+      <DataCredit />
     </Screen>
   );
 }

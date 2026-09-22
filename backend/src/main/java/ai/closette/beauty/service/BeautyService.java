@@ -9,7 +9,10 @@ import ai.closette.beauty.dto.CreateBeautyItemRequest;
 import ai.closette.beauty.dto.UpdateBeautyItemRequest;
 import ai.closette.beauty.model.BeautyCategory;
 import ai.closette.beauty.model.BeautyItem;
+import ai.closette.beauty.model.IngredientExplanationEntity;
 import ai.closette.beauty.repository.BeautyItemRepository;
+import ai.closette.beauty.repository.IngredientExplanationRepository;
+import ai.closette.common.i18n.Messages;
 import ai.closette.common.exception.ApiException;
 import ai.closette.common.exception.MessageKeys;
 import ai.closette.common.exception.ErrorCode;
@@ -32,11 +35,14 @@ public class BeautyService {
     private final BeautyItemRepository repository;
     private final StorageService storage;
     private final AIService aiService;
+    private final IngredientExplanationRepository explanations;
 
-    public BeautyService(BeautyItemRepository repository, StorageService storage, AIService aiService) {
+    public BeautyService(BeautyItemRepository repository, StorageService storage, AIService aiService,
+                         IngredientExplanationRepository explanations) {
         this.repository = repository;
         this.storage = storage;
         this.aiService = aiService;
+        this.explanations = explanations;
     }
 
     /** Flow B step 1 — upload a product photo, get an editable AI analysis back. */
@@ -124,7 +130,15 @@ public class BeautyService {
         repository.delete(item);
     }
 
-    /** FR-06: explain an ingredient in plain language (via the AI seam). */
+    /**
+     * FR-06: explain an ingredient in plain language (via the AI seam).
+     *
+     * Answered from the shared cache when it can be. "Niacinamide" means the same
+     * thing to everyone, so the model is asked once per ingredient per language
+     * rather than once per tap; at a cost per call, that is the difference between
+     * a fixed bill and one that grows with every reader.
+     */
+    @Transactional
     public IngredientExplanation explainIngredient(String name) {
         String cleaned = name == null ? "" : name.trim();
         // Guard against junk tokens (a stray ".", a number) reaching the model, which otherwise
@@ -132,7 +146,16 @@ public class BeautyService {
         if (cleaned.length() < 2 || !cleaned.matches(".*\\p{L}{2,}.*")) {
             throw ApiException.validation(MessageKeys.INGREDIENT_REQUIRED);
         }
-        return aiService.explainIngredient(cleaned);
+        String lang = Messages.currentLanguageTag();
+        var cached = explanations.findByInciNameIgnoreCaseAndLang(cleaned, lang);
+        if (cached.isPresent()) {
+            return new IngredientExplanation(cleaned, cached.get().getExplanation());
+        }
+        IngredientExplanation fresh = aiService.explainIngredient(cleaned);
+        if (fresh != null && fresh.explanation() != null && !fresh.explanation().isBlank()) {
+            explanations.save(new IngredientExplanationEntity(cleaned, lang, fresh.explanation()));
+        }
+        return fresh;
     }
 
     private BeautyItem require(UUID userId, UUID id) {

@@ -149,6 +149,12 @@ export function ProfileScreen() {
     },
     {
       icon: 'info',
+      title: text('profile.dataSources'),
+      subtitle: text('profile.dataSourcesHint'),
+      onPress: () => { void openLegalPage('https://world.openbeautyfacts.org'); },
+    },
+    {
+      icon: 'info',
       title: text('profile.about'),
       subtitle: text('profile.version', { version: APP_VERSION }),
       onPress: () =>

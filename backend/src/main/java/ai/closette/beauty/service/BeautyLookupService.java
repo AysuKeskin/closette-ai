@@ -2,6 +2,8 @@ package ai.closette.beauty.service;
 
 import ai.closette.beauty.dto.BeautyProductCandidate;
 import ai.closette.beauty.model.BeautyCategory;
+import ai.closette.beauty.model.CatalogueProduct;
+import ai.closette.beauty.repository.CatalogueProductRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +11,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
@@ -45,6 +49,12 @@ public class BeautyLookupService {
     private static final Duration MAKEUP_CACHE_TTL = Duration.ofHours(24);
     // Overall cap for a search: sources run in parallel, so this bounds the whole call, not each one.
     private static final long SEARCH_TIMEOUT_MS = 6000;
+    // How many local hits count as a good enough answer. Open Beauty Facts allows only
+    // a handful of searches a minute PER IP, and every user of this app shares the
+    // server's one IP — so the upstream budget belongs to the whole app, not to each
+    // person. Answering a repeat search from our own rows is what keeps that budget
+    // for the queries that genuinely need it.
+    private static final int CACHE_HIT_FLOOR = 5;
 
     // Well-known brands (normalised: lowercase, punctuation stripped) that get a ranking boost,
     // so a generic query like "mascara" surfaces recognisable products, not obscure indie ones.
@@ -86,12 +96,15 @@ public class BeautyLookupService {
     private volatile List<MakeupEntry> makeupCache;
     private volatile Instant makeupCacheAt;
     private final AtomicBoolean makeupRefreshing = new AtomicBoolean(false);
+    private final CatalogueProductRepository catalogue;
 
     public BeautyLookupService(
             @Value("${closette.beauty.rapidapi-key:}") String rapidApiKey,
             @Value("${closette.beauty.rapidapi-host:sephora.p.rapidapi.com}") String rapidApiHost,
             @Value("${closette.beauty.rapidapi-search-path:/products/list}") String rapidSearchPath,
-            @Value("${closette.beauty.rapidapi-query-param:q}") String rapidQueryParam) {
+            @Value("${closette.beauty.rapidapi-query-param:q}") String rapidQueryParam,
+            CatalogueProductRepository catalogue) {
+        this.catalogue = catalogue;
         this.rapidApiKey = rapidApiKey == null ? "" : rapidApiKey.trim();
         this.rapidApiHost = rapidApiHost;
         this.rapidSearchPath = rapidSearchPath;
@@ -107,7 +120,16 @@ public class BeautyLookupService {
         }
     }
 
+    @Transactional
     public BeautyProductCandidate byBarcode(String barcode) {
+        var cached = catalogue.findById(barcode == null ? "" : barcode);
+        if (cached.isPresent()) return toCandidate(cached.get());
+        BeautyProductCandidate fresh = fetchByBarcode(barcode);
+        if (fresh != null) remember(List.of(fresh));
+        return fresh;
+    }
+
+    private BeautyProductCandidate fetchByBarcode(String barcode) {
         try {
             JsonNode root = obf.get()
                     .uri("/api/v2/product/{code}.json?fields={fields}", barcode, FIELDS)
@@ -134,8 +156,18 @@ public class BeautyLookupService {
 
     /** Name search aggregated over every source, de-duplicated and ranked by relevance. The sources
      * are queried in parallel and bounded by {@link #SEARCH_TIMEOUT_MS}; whatever returns in time is merged. */
+    @Transactional
     public List<BeautyProductCandidate> search(String query) {
         if (query == null || query.isBlank()) return List.of();
+
+        List<BeautyProductCandidate> known = catalogue.search(query.trim(), PageRequest.of(0, MAX_RESULTS))
+                .stream().map(BeautyLookupService::toCandidate).toList();
+        if (known.size() >= CACHE_HIT_FLOOR) {
+            String[] localTokens = tokens(query);
+            return known.stream()
+                    .sorted(Comparator.comparingInt((BeautyProductCandidate c) -> score(c, localTokens)).reversed())
+                    .toList();
+        }
 
         CompletableFuture<List<BeautyProductCandidate>> rapidF = CompletableFuture.supplyAsync(() -> rapidApiSearch(query));
         CompletableFuture<List<BeautyProductCandidate>> makeupF = CompletableFuture.supplyAsync(() -> makeupSearch(query));
@@ -153,10 +185,36 @@ public class BeautyLookupService {
         for (BeautyProductCandidate c : obfF.getNow(List.of())) merged.putIfAbsent(dedupeKey(c), c);
 
         String[] tokens = tokens(query);
-        return merged.values().stream()
+        List<BeautyProductCandidate> ranked = merged.values().stream()
                 .sorted(Comparator.comparingInt((BeautyProductCandidate c) -> score(c, tokens)).reversed())
                 .limit(MAX_RESULTS)
                 .toList();
+        remember(ranked);
+        return ranked;
+    }
+
+    /**
+     * Keep what the upstreams just told us. Only products carrying a barcode are
+     * stored, because that is the identity the cache is keyed by — a result without
+     * one cannot be recognised again, and guessing a key would merge two products.
+     */
+    private void remember(List<BeautyProductCandidate> found) {
+        for (BeautyProductCandidate c : found) {
+            if (c.barcode() == null || c.barcode().isBlank()) continue;
+            if (catalogue.existsById(c.barcode())) continue;
+            catalogue.save(new CatalogueProduct(
+                    c.barcode(), c.productName(), c.brand(), c.category(),
+                    c.ingredients() == null ? null : String.join(", ", c.ingredients()),
+                    c.imageUrl(), "obf"));
+        }
+    }
+
+    private static BeautyProductCandidate toCandidate(CatalogueProduct p) {
+        List<String> ingredients = p.getIngredients() == null || p.getIngredients().isBlank()
+                ? List.of()
+                : List.of(p.getIngredients().split("\\s*,\\s*"));
+        return new BeautyProductCandidate(
+                p.getBarcode(), p.getProductName(), p.getBrand(), p.getCategory(), ingredients, p.getImageUrl());
     }
 
     /** Higher = more relevant: known brand, query words in the name/brand, and having an image all help. */

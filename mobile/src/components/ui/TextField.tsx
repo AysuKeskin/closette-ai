@@ -95,6 +95,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     fontSize: typography.size.body,
     color: colors.textPrimary,
+    // Pin the text layout. Nothing in this file or above it sets either of these,
+    // yet iOS has been seen rendering the placeholder stretched across the whole
+    // field, one letter per gap. Stating both leaves the platform nothing to
+    // decide for us.
+    textAlign: 'left',
+    letterSpacing: 0,
   },
   inputWithToggle: { paddingRight: 64 },
   focused: { borderColor: colors.primary },

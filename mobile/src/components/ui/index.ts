@@ -14,6 +14,7 @@ export { LinkText } from './LinkText';
 export { PasswordChecklist, isPasswordStrong } from './PasswordChecklist';
 export { VerifyBanner } from './VerifyBanner';
 export { StylePrompt } from './StylePrompt';
+export { DataCredit } from './DataCredit';
 export { Icon } from './Icon';
 export type { IconName } from './Icon';
 export { SwipeDeck } from './SwipeDeck';
