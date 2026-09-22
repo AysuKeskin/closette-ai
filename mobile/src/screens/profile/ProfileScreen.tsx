@@ -8,7 +8,7 @@ import { userApi } from '../../api/endpoints';
 import { useAuth } from '../../store/auth';
 import { deviceLanguage, useLocale } from '../../store/locale';
 import { useRetagWardrobe } from '../../features/wardrobe';
-import { useStylePreferences } from '../../features/preferences';
+import { hasStyleProfile, useStylePreferences } from '../../features/preferences';
 import { useT } from '../../i18n';
 import {
   openFavorites,
@@ -17,9 +17,11 @@ import {
   openStyleProfile,
   openVerifyEmail,
 } from '../../navigation/navigationRef';
-import { colors, feedback, radius, spacing, typography } from '../../theme';
+import { colors, feedback, palette, radius, spacing, typography } from '../../theme';
 
-type Row = { icon?: IconName; emoji?: string; title: string; subtitle: string; done?: boolean; danger?: boolean; onPress: () => void };
+type Row = { icon?: IconName; emoji?: string; title: string; subtitle: string; done?: boolean;
+  /** Shown as a green pill where the done tick would go, for a row still worth doing. */
+  cta?: string; danger?: boolean; onPress: () => void };
 
 const APP_VERSION = '0.1.0';
 
@@ -57,7 +59,7 @@ export function ProfileScreen() {
     );
   };
 
-  const styleDone = prefs.data?.onboardingCompleted ?? false;
+  const styleDone = hasStyleProfile(prefs.data);
   const savedStyleCount = prefs.data?.preferredStyles?.length ?? 0;
   const styleSummary = styleDone
     ? [
@@ -108,6 +110,7 @@ export function ProfileScreen() {
       title: text('profile.stylePreferences'),
       subtitle: styleSummary,
       done: styleDone,
+      cta: styleDone ? undefined : text('profile.styleTakeTest'),
       // Once the quiz is done, tapping offers to review the saved result or retake it
       // (via the on-brand sheet); a fresh user goes straight into the quiz.
       onPress: styleDone ? () => setStyleSheetOpen(true) : () => openOnboarding(),
@@ -232,6 +235,10 @@ export function ProfileScreen() {
                   <View style={styles.doneBadge}>
                     <AppText style={styles.doneCheck}>✓</AppText>
                   </View>
+                ) : row.cta ? (
+                  <View style={styles.ctaPill}>
+                    <AppText style={styles.ctaText}>{row.cta}</AppText>
+                  </View>
                 ) : null}
               </View>
               <AppText variant="caption" tone={row.done ? 'success' : 'muted'}>
@@ -349,6 +356,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   doneCheck: { color: colors.onPrimary, fontSize: 11, fontWeight: typography.weight.bold, lineHeight: 13 },
+  ctaPill: {
+    backgroundColor: colors.success,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  ctaText: { color: palette.white, fontSize: 11, fontWeight: typography.weight.bold },
   chevron: { fontSize: 22, color: colors.textMuted },
   // Inset hairline that starts after the icon badge, like a grouped settings list.
   divider: {

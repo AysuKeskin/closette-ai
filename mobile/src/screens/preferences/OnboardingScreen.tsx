@@ -67,8 +67,10 @@ export function OnboardingScreen() {
     );
   };
 
-  const skip = () =>
-    update.mutate({ onboardingCompleted: true }, { onSuccess: () => navigation.goBack() });
+  // "For now" means exactly that: nothing is saved and nothing is claimed, so the
+  // invitation stays on Home and in Profile. Marking the quiz complete here is what
+  // used to leave accounts with a style profile that was empty.
+  const skip = () => navigation.goBack();
 
   // Each aesthetic photo counts as its own step, so the bar creeps forward on
   // every swipe rather than jumping in one block. Units: season + dress-up + one per card.

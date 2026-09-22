@@ -3,15 +3,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
-import {
-  ActionCard,
-  AppText,
-  Card,
-  Icon,
-  ItemTile,
-  SectionHeader,
-  VerifyBanner,
-} from '../components/ui';
+import { ActionCard, AppText, Card, Icon, ItemTile, SectionHeader, StylePrompt, VerifyBanner } from '../components/ui';
 import { useDomainLabels } from '../i18n/domain';
 import { useT } from '../i18n';
 import { useRecentItems } from '../features/wardrobe';
@@ -20,7 +12,7 @@ import { useAuth } from '../store/auth';
 import { colors, feedback, radius, spacing, typography } from '../theme';
 import { Screen } from '../components/ui';
 import { openLookDetail, openOnboarding, openVerifyEmail, openItemDetail } from '../navigation/navigationRef';
-import { useStylePreferences } from '../features/preferences';
+import { hasStyleProfile, useStylePreferences } from '../features/preferences';
 import type { HomeStackParamList } from '../navigation/types';
 
 export function HomeScreen() {
@@ -35,7 +27,7 @@ export function HomeScreen() {
 
   // First run: open the style-onboarding once when it hasn't been completed.
   useEffect(() => {
-    if (prefs.data && !prefs.data.onboardingCompleted && !onboardingShown.current) {
+    if (prefs.data && !hasStyleProfile(prefs.data) && !onboardingShown.current) {
       onboardingShown.current = true;
       const t = setTimeout(() => openOnboarding(), 400);
       return () => clearTimeout(t);
@@ -58,6 +50,13 @@ export function HomeScreen() {
         {user && !user.emailVerified ? (
           <View style={styles.banner}>
             <VerifyBanner onPress={openVerifyEmail} />
+          </View>
+        ) : prefs.data && !hasStyleProfile(prefs.data) ? (
+          // One call to action at a time. An unverified email blocks more than an
+          // unfinished quiz does, so it wins the slot; the invitation waits its turn
+          // rather than stacking two coloured cards on the first screen.
+          <View style={styles.banner}>
+            <StylePrompt onPress={() => openOnboarding()} />
           </View>
         ) : null}
 
